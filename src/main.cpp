@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <shellapi.h>
+#include <string>
 
 namespace
 {
@@ -18,6 +19,8 @@ namespace
     constexpr int WINDOW_HEIGHT = 500;
 
     bool g_isDragOver = false;
+    std::wstring g_appPath;
+    std::wstring g_appName;
 
     HFONT CreatePingoFont(int size, int weight)
     {
@@ -37,12 +40,7 @@ namespace
         HPEN oldPen = static_cast<HPEN>(SelectObject(hdc, pen));
         HBRUSH oldBrush = static_cast<HBRUSH>(SelectObject(hdc, brush));
 
-        RoundRect(
-            hdc,
-            rect.left, rect.top,
-            rect.right, rect.bottom,
-            18, 18
-        );
+        RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, 18, 18);
 
         SelectObject(hdc, oldBrush);
         SelectObject(hdc, oldPen);
@@ -73,15 +71,88 @@ namespace
     bool IsExeFile(const wchar_t* path)
     {
         const wchar_t* extension = wcsrchr(path, L'.');
-        if (!extension)
-            return false;
+        return extension && lstrcmpiW(extension, L".exe") == 0;
+    }
 
-        return lstrcmpiW(extension, L".exe") == 0;
+    std::wstring GetFileNameWithoutExtension(const std::wstring& path)
+    {
+        const size_t slash = path.find_last_of(L"\\/");
+        const size_t dot = path.find_last_of(L'.');
+
+        const size_t nameStart = slash == std::wstring::npos ? 0 : slash + 1;
+        const size_t nameEnd =
+            dot != std::wstring::npos && dot > nameStart
+                ? dot
+                : path.length();
+
+        return path.substr(nameStart, nameEnd - nameStart);
+    }
+
+    std::wstring GetExecutableName(const std::wstring& path)
+    {
+        // Primeiro tenta obter o nome exibido pelo próprio Windows.
+        DWORD dummy = 0;
+        const DWORD versionSize = GetFileVersionInfoSizeW(path.c_str(), &dummy);
+
+        if (versionSize > 0)
+        {
+            std::wstring buffer(versionSize, L'\\0');
+
+            if (GetFileVersionInfoW(path.c_str(), 0, versionSize, buffer.data()))
+            {
+                struct LANGANDCODEPAGE
+                {
+                    WORD language;
+                    WORD codePage;
+                };
+
+                LANGANDCODEPAGE* translations = nullptr;
+                UINT translationSize = 0;
+
+                if (VerQueryValueW(
+                        buffer.data(),
+                        L"\\VarFileInfo\\Translation",
+                        reinterpret_cast<LPVOID*>(&translations),
+                        &translationSize) &&
+                    translationSize >= sizeof(LANGANDCODEPAGE))
+                {
+                    for (UINT i = 0;
+                         i < translationSize / sizeof(LANGANDCODEPAGE);
+                         ++i)
+                    {
+                        wchar_t subBlock[64]{};
+                        wsprintfW(
+                            subBlock,
+                            L"\\StringFileInfo\\%04x%04x\\FileDescription",
+                            translations[i].language,
+                            translations[i].codePage
+                        );
+
+                        wchar_t* description = nullptr;
+                        UINT descriptionLength = 0;
+
+                        if (VerQueryValueW(
+                                buffer.data(),
+                                subBlock,
+                                reinterpret_cast<LPVOID*>(&description),
+                                &descriptionLength) &&
+                            description &&
+                            descriptionLength > 0)
+                        {
+                            return description;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: nome do executável sem .exe.
+        return GetFileNameWithoutExtension(path);
     }
 
     void HandleDroppedFile(HWND hwnd, HDROP drop)
     {
-        UINT fileCount = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+        const UINT fileCount = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
 
         for (UINT i = 0; i < fileCount; ++i)
         {
@@ -93,12 +164,17 @@ namespace
             if (!IsExeFile(path))
                 continue;
 
-            // Etapa 4 apenas recebe e valida o .exe.
-            // A leitura do nome e do icone sera implementada na Etapa 5/6.
+            g_appPath = path;
+            g_appName = GetExecutableName(g_appPath);
+
+            std::wstring message =
+                L"Aplicativo detectado: " + g_appName +
+                L"\n\nCaminho:\n" + g_appPath;
+
             MessageBoxW(
                 hwnd,
-                path,
-                L"Aplicativo recebido",
+                message.c_str(),
+                L"Pingo App",
                 MB_OK | MB_ICONINFORMATION
             );
 
@@ -144,8 +220,6 @@ namespace
             FillRect(hdc, &client, background);
             DeleteObject(background);
 
-            SetBkMode(hdc, TRANSPARENT);
-
             DrawTextLine(
                 hdc,
                 L"Pingo App",
@@ -166,12 +240,7 @@ namespace
                 DT_LEFT | DT_SINGLELINE | DT_VCENTER
             );
 
-            RECT dropRect{
-                32,
-                135,
-                client.right - 32,
-                client.bottom - 32
-            };
+            RECT dropRect{32, 135, client.right - 32, client.bottom - 32};
 
             DrawRoundedPanel(
                 hdc,
