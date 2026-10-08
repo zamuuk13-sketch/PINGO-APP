@@ -577,6 +577,8 @@ namespace
         if (!item || !item->floatingWindow)
             return;
 
+        // Switching between TOPMOST and normal mode is done with
+        // SetWindowPos so the setting takes effect immediately.
         SetWindowPos(
             item->floatingWindow,
             item->alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
@@ -1420,7 +1422,7 @@ namespace
             return false;
 
         HWND floating = CreateWindowExW(
-            WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_LAYERED,
+            WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
             FLOATING_CLASS,
             item->name.c_str(),
             WS_POPUP,
@@ -1448,6 +1450,8 @@ namespace
 
         ShowWindow(floating, SW_SHOWNOACTIVATE);
         UpdateWindow(floating);
+        // Stage 18: the stacking mode is explicit instead of being
+        // forced by the extended window style at creation time.
         SetWindowPos(
             floating,
             item->alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
