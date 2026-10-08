@@ -21,6 +21,7 @@ namespace
     bool g_isDragOver = false;
     std::wstring g_appPath;
     std::wstring g_appName;
+    HICON g_appIcon = nullptr;
 
     HFONT CreatePingoFont(int size, int weight)
     {
@@ -90,7 +91,6 @@ namespace
 
     std::wstring GetExecutableName(const std::wstring& path)
     {
-        // Primeiro tenta obter o nome exibido pelo próprio Windows.
         DWORD dummy = 0;
         const DWORD versionSize = GetFileVersionInfoSizeW(path.c_str(), &dummy);
 
@@ -146,8 +146,34 @@ namespace
             }
         }
 
-        // Fallback: nome do executável sem .exe.
         return GetFileNameWithoutExtension(path);
+    }
+
+    HICON ExtractExecutableIcon(const std::wstring& path)
+    {
+        HICON largeIcon = nullptr;
+        HICON smallIcon = nullptr;
+
+        const UINT extracted = ExtractIconExW(
+            path.c_str(),
+            0,
+            &largeIcon,
+            &smallIcon,
+            1
+        );
+
+        if (smallIcon)
+            DestroyIcon(smallIcon);
+
+        if (extracted == 0)
+        {
+            if (largeIcon)
+                DestroyIcon(largeIcon);
+
+            return nullptr;
+        }
+
+        return largeIcon;
     }
 
     void HandleDroppedFile(HWND hwnd, HDROP drop)
@@ -167,8 +193,18 @@ namespace
             g_appPath = path;
             g_appName = GetExecutableName(g_appPath);
 
+            if (g_appIcon)
+            {
+                DestroyIcon(g_appIcon);
+                g_appIcon = nullptr;
+            }
+
+            g_appIcon = ExtractExecutableIcon(g_appPath);
+
             std::wstring message =
-                L"Aplicativo detectado: " + g_appName +
+                L"Aplicativo: " + g_appName +
+                L"\nIcone: " +
+                (g_appIcon ? L"detectado" : L"nao encontrado") +
                 L"\n\nCaminho:\n" + g_appPath;
 
             MessageBoxW(
@@ -205,6 +241,12 @@ namespace
             return 0;
 
         case WM_DESTROY:
+            if (g_appIcon)
+            {
+                DestroyIcon(g_appIcon);
+                g_appIcon = nullptr;
+            }
+
             PostQuitMessage(0);
             return 0;
 
