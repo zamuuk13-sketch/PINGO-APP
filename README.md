@@ -16,6 +16,14 @@ A proposta é simples: arraste um aplicativo para o Pingo, deixe seu ícone flut
 - 👻 Opção para manter os ícones sobre outras janelas
 - ⚙️ Ações rápidas pelo botão direito
 
+## 💾 Configurações persistentes
+
+O Pingo salva o estado do ícone localmente em:
+
+`%APPDATA%\Pingo App\settings.json`
+
+São persistidos o caminho do `.exe`, nome personalizado, posição, tamanho, modo fixo, modo sempre sobre outras janelas e uma versão das configurações para futuras expansões.
+
 ## 🛠️ Tecnologia
 
 O projeto será desenvolvido em **C++**, utilizando recursos nativos do Windows para manter o aplicativo leve e simples.
@@ -24,9 +32,9 @@ O projeto será desenvolvido em **C++**, utilizando recursos nativos do Windows 
 
 **Etapa 16 — Em desenvolvimento** 🚧
 
-As etapas 1–16 já foram implementadas. Na **Etapa 16 — remover aplicativo**, o Pingo agora pede confirmação antes de remover um ícone. A remoção apaga apenas o item do Pingo e **não exclui o arquivo `.exe` original**.
+As etapas 1–16 já foram implementadas. Além das etapas planejadas, o sistema de **configurações persistentes** já foi adicionado: ao fechar e abrir o Pingo, o estado salvo do ícone é restaurado automaticamente. A remoção do aplicativo também apaga o arquivo de configuração correspondente.
 
-A próxima etapa planejada é a **Etapa 17 — redimensionar/configurar o ícone**.
+A próxima etapa planejada continua sendo a **Etapa 17 — redimensionar/configurar o ícone**.
 
 ## 🎯 Objetivo
 
