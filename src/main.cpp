@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <windowsx.h>
 #include <ole2.h>
 #include <oleidl.h>
 #include <shellapi.h>
