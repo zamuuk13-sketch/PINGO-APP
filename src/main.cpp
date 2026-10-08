@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <shellapi.h>
 
 namespace
 {
@@ -9,11 +10,14 @@ namespace
     constexpr COLORREF SURFACE = RGB(22, 22, 22);
     constexpr COLORREF SURFACE_HOVER = RGB(28, 28, 28);
     constexpr COLORREF BORDER = RGB(48, 48, 48);
+    constexpr COLORREF BORDER_ACTIVE = RGB(80, 80, 80);
     constexpr COLORREF TEXT_PRIMARY = RGB(255, 255, 255);
     constexpr COLORREF TEXT_SECONDARY = RGB(165, 165, 165);
 
     constexpr int WINDOW_WIDTH = 800;
     constexpr int WINDOW_HEIGHT = 500;
+
+    bool g_isDragOver = false;
 
     HFONT CreatePingoFont(int size, int weight)
     {
@@ -66,6 +70,44 @@ namespace
         DeleteObject(font);
     }
 
+    bool IsExeFile(const wchar_t* path)
+    {
+        const wchar_t* extension = wcsrchr(path, L'.');
+        if (!extension)
+            return false;
+
+        return lstrcmpiW(extension, L".exe") == 0;
+    }
+
+    void HandleDroppedFile(HWND hwnd, HDROP drop)
+    {
+        UINT fileCount = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+
+        for (UINT i = 0; i < fileCount; ++i)
+        {
+            wchar_t path[MAX_PATH]{};
+
+            if (DragQueryFileW(drop, i, path, MAX_PATH) == 0)
+                continue;
+
+            if (!IsExeFile(path))
+                continue;
+
+            // Etapa 4 apenas recebe e valida o .exe.
+            // A leitura do nome e do icone sera implementada na Etapa 5/6.
+            MessageBoxW(
+                hwnd,
+                path,
+                L"Aplicativo recebido",
+                MB_OK | MB_ICONINFORMATION
+            );
+
+            break;
+        }
+
+        DragFinish(drop);
+    }
+
     LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         switch (message)
@@ -78,6 +120,12 @@ namespace
             return 0;
 
         case WM_MOUSEMOVE:
+            return 0;
+
+        case WM_DROPFILES:
+            g_isDragOver = false;
+            InvalidateRect(hwnd, nullptr, FALSE);
+            HandleDroppedFile(hwnd, reinterpret_cast<HDROP>(wParam));
             return 0;
 
         case WM_DESTROY:
@@ -125,11 +173,18 @@ namespace
                 client.bottom - 32
             };
 
-            DrawRoundedPanel(hdc, dropRect, SURFACE, BORDER);
+            DrawRoundedPanel(
+                hdc,
+                dropRect,
+                g_isDragOver ? SURFACE_HOVER : SURFACE,
+                g_isDragOver ? BORDER_ACTIVE : BORDER
+            );
 
             DrawTextLine(
                 hdc,
-                L"Solte um arquivo .exe aqui",
+                g_isDragOver
+                    ? L"Solte o arquivo .exe aqui"
+                    : L"Arraste um arquivo .exe para ca",
                 RECT{
                     dropRect.left + 20,
                     (dropRect.top + dropRect.bottom) / 2 - 18,
@@ -177,6 +232,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
 
     if (!hwnd)
         return 0;
+
+    DragAcceptFiles(hwnd, TRUE);
 
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
