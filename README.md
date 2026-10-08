@@ -22,11 +22,11 @@ O projeto será desenvolvido em **C++**, utilizando recursos nativos do Windows 
 
 ## 📍 Status
 
-**Etapa 13 — Em desenvolvimento** 🚧
+**Etapa 15 — Em desenvolvimento** 🚧
 
-As etapas 1–13 já foram implementadas. O Pingo agora permite abrir aplicativos com duplo clique, usar o menu de contexto com ações rápidas e **renomear o nome exibido do aplicativo** sem alterar o arquivo original.
+As etapas 1–15 já foram implementadas. O Pingo agora possui as ações de **localizar o arquivo** e **executar como administrador** no menu de contexto. A execução como administrador utiliza o fluxo nativo de elevação do Windows (UAC) e trata falhas sem interromper o aplicativo.
 
-A próxima etapa planejada é a **Etapa 14 — localizar o arquivo do aplicativo**.
+A próxima etapa planejada é a **Etapa 16 — remover aplicativo**.
 
 ## 🎯 Objetivo
 
