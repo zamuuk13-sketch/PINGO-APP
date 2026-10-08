@@ -572,6 +572,47 @@ namespace
         return max(FLOATING_ICON_HEIGHT, item ? item->size + 46 : FLOATING_ICON_HEIGHT);
     }
 
+    bool EnsurePositionOnAvailableMonitor(PingoAppItem* item)
+    {
+        if (!item)
+            return false;
+
+        POINT center{
+            item->position.x + GetFloatingWidth(item) / 2,
+            item->position.y + GetFloatingHeight(item) / 2
+        };
+
+        HMONITOR monitor = MonitorFromPoint(center, MONITOR_DEFAULTTONULL);
+        if (!monitor)
+            monitor = MonitorFromPoint(center, MONITOR_DEFAULTTOPRIMARY);
+
+        MONITORINFO info{};
+        info.cbSize = sizeof(info);
+        if (!GetMonitorInfoW(monitor, &info))
+            return false;
+
+        const int width = GetFloatingWidth(item);
+        const int height = GetFloatingHeight(item);
+        const RECT& work = info.rcWork;
+
+        int newX = item->position.x;
+        int newY = item->position.y;
+
+        if (newX + width > work.right)
+            newX = work.right - width;
+        if (newY + height > work.bottom)
+            newY = work.bottom - height;
+        if (newX < work.left)
+            newX = work.left;
+        if (newY < work.top)
+            newY = work.top;
+
+        const bool changed = newX != item->position.x || newY != item->position.y;
+        item->position.x = newX;
+        item->position.y = newY;
+        return changed;
+    }
+
     void ApplyFloatingLayout(PingoAppItem* item)
     {
         if (!item || !item->floatingWindow)
