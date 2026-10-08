@@ -11,6 +11,8 @@ add_executable(PingoApp WIN32
 
 target_compile_definitions(PingoApp PRIVATE UNICODE _UNICODE)
 
+target_link_libraries(PingoApp PRIVATE Version Shell32)
+
 if (MSVC)
     target_compile_options(PingoApp PRIVATE /W4)
 endif()
