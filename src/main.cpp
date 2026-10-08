@@ -258,7 +258,7 @@ namespace
             return;
 
         std::ofstream file(
-            std::wstring(settingsPath + L".tmp"),
+            (settingsPath + L".tmp").c_str(),
             std::ios::binary | std::ios::trunc);
 
         if (!file)
