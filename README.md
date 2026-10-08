@@ -24,7 +24,7 @@ O projeto será desenvolvido em **C++**, utilizando recursos nativos do Windows 
 
 **Etapa 15 — Em desenvolvimento** 🚧
 
-As etapas 1–15 já foram implementadas. O Pingo agora possui as ações de **localizar o arquivo** e **executar como administrador** no menu de contexto. A execução como administrador utiliza o fluxo nativo de elevação do Windows (UAC) e trata falhas sem interromper o aplicativo.
+As etapas 1–15 já foram implementadas. A **Etapa 14 — localizar arquivo** foi formalmente finalizada: o menu de contexto abre o Windows Explorer já selecionando o executável original do aplicativo. A **Etapa 15 — executar como administrador** utiliza o fluxo nativo de elevação do Windows (UAC) e trata falhas sem interromper o aplicativo.
 
 A próxima etapa planejada é a **Etapa 16 — remover aplicativo**.
 
