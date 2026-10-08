@@ -6,6 +6,7 @@ namespace
 {
     constexpr wchar_t WINDOW_CLASS[] = L"PingoAppWindow";
     constexpr wchar_t WINDOW_TITLE[] = L"Pingo App";
+    constexpr wchar_t FLOATING_CLASS[] = L"PingoFloatingIcon";
 
     constexpr COLORREF BACKGROUND = RGB(13, 13, 13);
     constexpr COLORREF SURFACE = RGB(22, 22, 22);
@@ -17,6 +18,8 @@ namespace
 
     constexpr int WINDOW_WIDTH = 800;
     constexpr int WINDOW_HEIGHT = 500;
+    constexpr int FLOATING_ICON_WIDTH = 96;
+    constexpr int FLOATING_ICON_HEIGHT = 112;
 
     struct PingoAppItem
     {
@@ -25,6 +28,7 @@ namespace
         HICON icon = nullptr;
         POINT position{120, 180};
         int size = 72;
+        HWND floatingWindow = nullptr;
     };
 
     bool g_isDragOver = false;
@@ -183,10 +187,165 @@ namespace
         return largeIcon;
     }
 
+    void DrawFloatingIcon(HDC hdc, PingoAppItem* item)
+    {
+        RECT client{};
+        GetClientRect(WindowFromDC(hdc), &client);
+
+        HBRUSH background = CreateSolidBrush(RGB(0, 0, 0));
+        FillRect(hdc, &client, background);
+        DeleteObject(background);
+
+        if (item->icon)
+        {
+            const int iconSize = item->size;
+            const int x = (FLOATING_ICON_WIDTH - iconSize) / 2;
+            const int y = 4;
+
+            DrawIconEx(
+                hdc,
+                x,
+                y,
+                item->icon,
+                iconSize,
+                iconSize,
+                0,
+                nullptr,
+                DI_NORMAL
+            );
+        }
+
+        RECT textRect{
+            4,
+            item->size + 7,
+            FLOATING_ICON_WIDTH - 4,
+            FLOATING_ICON_HEIGHT - 2
+        };
+
+        DrawTextLine(
+            hdc,
+            item->name.c_str(),
+            textRect,
+            13,
+            FW_NORMAL,
+            TEXT_PRIMARY,
+            DT_CENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_VCENTER
+        );
+    }
+
+    LRESULT CALLBACK FloatingWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+    {
+        PingoAppItem* item =
+            reinterpret_cast<PingoAppItem*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+
+        switch (message)
+        {
+        case WM_NCCREATE:
+        {
+            auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            SetWindowLongPtrW(
+                hwnd,
+                GWLP_USERDATA,
+                reinterpret_cast<LONG_PTR>(create->lpCreateParams)
+            );
+            return TRUE;
+        }
+
+        case WM_ERASEBKGND:
+            return 1;
+
+        case WM_PAINT:
+        {
+            PAINTSTRUCT ps{};
+            HDC hdc = BeginPaint(hwnd, &ps);
+
+            if (item)
+                DrawFloatingIcon(hdc, item);
+
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+
+        case WM_LBUTTONDOWN:
+            if (item)
+            {
+                ReleaseCapture();
+                SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+            }
+            return 0;
+
+        case WM_DESTROY:
+            if (item)
+                item->floatingWindow = nullptr;
+            return 0;
+
+        default:
+            return DefWindowProcW(hwnd, message, wParam, lParam);
+        }
+    }
+
+    bool RegisterFloatingWindowClass(HINSTANCE hInstance)
+    {
+        static bool registered = false;
+
+        if (registered)
+            return true;
+
+        WNDCLASSW wc{};
+        wc.lpfnWndProc = FloatingWindowProc;
+        wc.hInstance = hInstance;
+        wc.lpszClassName = FLOATING_CLASS;
+        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+        wc.style = CS_HREDRAW | CS_VREDRAW;
+
+        if (!RegisterClassW(&wc))
+            return false;
+
+        registered = true;
+        return true;
+    }
+
+    bool CreateFloatingIconWindow(HWND owner, HINSTANCE hInstance, PingoAppItem* item)
+    {
+        if (!item || !RegisterFloatingWindowClass(hInstance))
+            return false;
+
+        HWND floating = CreateWindowExW(
+            WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
+            FLOATING_CLASS,
+            item->name.c_str(),
+            WS_POPUP,
+            item->position.x,
+            item->position.y,
+            FLOATING_ICON_WIDTH,
+            FLOATING_ICON_HEIGHT,
+            owner,
+            nullptr,
+            hInstance,
+            item
+        );
+
+        if (!floating)
+            return false;
+
+        item->floatingWindow = floating;
+
+        ShowWindow(floating, SW_SHOWNOACTIVATE);
+        UpdateWindow(floating);
+        return true;
+    }
+
     void DestroyAppItem(PingoAppItem*& item)
     {
         if (!item)
             return;
+
+        if (item->floatingWindow)
+        {
+            DestroyWindow(item->floatingWindow);
+            item->floatingWindow = nullptr;
+        }
 
         if (item->icon)
             DestroyIcon(item->icon);
@@ -195,17 +354,29 @@ namespace
         item = nullptr;
     }
 
-    PingoAppItem* CreatePingoAppItem(const std::wstring& path)
+    PingoAppItem* CreatePingoAppItem(
+        HWND owner,
+        HINSTANCE hInstance,
+        const std::wstring& path)
     {
         auto* item = new PingoAppItem;
         item->path = path;
         item->name = GetExecutableName(path);
         item->icon = ExtractExecutableIcon(path);
 
+        if (!CreateFloatingIconWindow(owner, hInstance, item))
+        {
+            if (item->icon)
+                DestroyIcon(item->icon);
+
+            delete item;
+            return nullptr;
+        }
+
         return item;
     }
 
-    void HandleDroppedFile(HWND hwnd, HDROP drop)
+    void HandleDroppedFile(HWND hwnd, HDROP drop, HINSTANCE hInstance)
     {
         const UINT fileCount = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
 
@@ -220,19 +391,21 @@ namespace
                 continue;
 
             DestroyAppItem(g_currentItem);
-            g_currentItem = CreatePingoAppItem(path);
+            g_currentItem = CreatePingoAppItem(hwnd, hInstance, path);
 
-            std::wstring message =
-                L"Item criado!\n\n" +
-                g_currentItem->name +
-                L"\n\nO Pingo ja possui os dados necessarios para criar o icone flutuante.";
+            if (g_currentItem)
+            {
+                std::wstring message =
+                    L"Icone flutuante criado para:\n" +
+                    g_currentItem->name;
 
-            MessageBoxW(
-                hwnd,
-                message.c_str(),
-                L"Pingo App",
-                MB_OK | MB_ICONINFORMATION
-            );
+                MessageBoxW(
+                    hwnd,
+                    message.c_str(),
+                    L"Pingo App",
+                    MB_OK | MB_ICONINFORMATION
+                );
+            }
 
             break;
         }
@@ -257,7 +430,11 @@ namespace
         case WM_DROPFILES:
             g_isDragOver = false;
             InvalidateRect(hwnd, nullptr, FALSE);
-            HandleDroppedFile(hwnd, reinterpret_cast<HDROP>(wParam));
+            HandleDroppedFile(
+                hwnd,
+                reinterpret_cast<HDROP>(wParam),
+                reinterpret_cast<HINSTANCE>(GetWindowLongPtrW(hwnd, GWLP_HINSTANCE))
+            );
             return 0;
 
         case WM_DESTROY:
@@ -359,6 +536,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
     if (!hwnd)
         return 0;
 
+    SetWindowLongPtrW(hwnd, GWLP_HINSTANCE, reinterpret_cast<LONG_PTR>(hInstance));
     DragAcceptFiles(hwnd, TRUE);
 
     ShowWindow(hwnd, nCmdShow);
