@@ -22,11 +22,11 @@ O projeto será desenvolvido em **C++**, utilizando recursos nativos do Windows 
 
 ## 📍 Status
 
-**Etapa 10 — Em desenvolvimento** 🚧
+**Etapa 13 — Em desenvolvimento** 🚧
 
-As etapas 1–10 já foram implementadas. A interface do Pingo foi atualizada com a identidade do pinguim e o sistema de arrastar/soltar foi reforçado com OLE Drag & Drop, incluindo feedback visual durante o arraste.
+As etapas 1–13 já foram implementadas. O Pingo agora permite abrir aplicativos com duplo clique, usar o menu de contexto com ações rápidas e **renomear o nome exibido do aplicativo** sem alterar o arquivo original.
 
-A próxima etapa planejada é a **Etapa 11 — abrir o aplicativo com duplo clique**.
+A próxima etapa planejada é a **Etapa 14 — localizar o arquivo do aplicativo**.
 
 ## 🎯 Objetivo
 
