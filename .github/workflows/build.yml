@@ -1,0 +1,27 @@
+name: Build Pingo App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configure CMake
+        run: cmake -S . -B build -A x64
+      - name: Build Release
+        run: cmake --build build --config Release
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "build/Release/PingoApp.exe" "dist/PingoApp.exe"
+      - name: Upload Pingo App
+        uses: actions/upload-artifact@v4
+        with:
+          name: PingoApp-Windows-x64
+          path: dist/PingoApp.exe
