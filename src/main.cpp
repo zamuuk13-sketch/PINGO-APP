@@ -443,7 +443,6 @@ namespace
 
         case PingoMenuCommand::Rename:
         case PingoMenuCommand::Configure:
-        case PingoMenuCommand::Open:
         default:
             break;
         }
