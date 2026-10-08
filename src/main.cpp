@@ -562,10 +562,37 @@ namespace
         return largeIcon;
     }
 
+    int GetFloatingWidth(const PingoAppItem* item)
+    {
+        return max(FLOATING_ICON_WIDTH, item ? item->size + 24 : FLOATING_ICON_WIDTH);
+    }
+
+    int GetFloatingHeight(const PingoAppItem* item)
+    {
+        return max(FLOATING_ICON_HEIGHT, item ? item->size + 46 : FLOATING_ICON_HEIGHT);
+    }
+
+    void ApplyFloatingLayout(PingoAppItem* item)
+    {
+        if (!item || !item->floatingWindow)
+            return;
+
+        SetWindowPos(
+            item->floatingWindow,
+            item->alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+            item->position.x,
+            item->position.y,
+            GetFloatingWidth(item),
+            GetFloatingHeight(item),
+            SWP_NOACTIVATE | SWP_SHOWWINDOW
+        );
+    }
+
     void DrawFloatingIcon(HDC hdc, PingoAppItem* item)
     {
+        HWND window = WindowFromDC(hdc);
         RECT client{};
-        GetClientRect(WindowFromDC(hdc), &client);
+        GetClientRect(window, &client);
 
         HBRUSH transparent = CreateSolidBrush(FLOATING_TRANSPARENT);
         FillRect(hdc, &client, transparent);
@@ -574,7 +601,7 @@ namespace
         if (item->icon)
         {
             const int iconSize = item->size;
-            const int x = (FLOATING_ICON_WIDTH - iconSize) / 2;
+            const int x = (client.right - iconSize) / 2;
             const int y = 2;
 
             DrawIconEx(
@@ -593,8 +620,8 @@ namespace
         RECT textRect{
             4,
             item->size + 8,
-            FLOATING_ICON_WIDTH - 4,
-            FLOATING_ICON_HEIGHT - 1
+            client.right - 4,
+            client.bottom - 1
         };
 
         RECT shadowRect = textRect;
@@ -944,6 +971,253 @@ namespace
         return state.accepted;
     }
 
+    struct ConfigureDialogState
+    {
+        PingoAppItem* item = nullptr;
+        HWND dialog = nullptr;
+        HWND sizeEdit = nullptr;
+        HWND fixedCheck = nullptr;
+        HWND topmostCheck = nullptr;
+        int size = 72;
+        bool fixedPosition = false;
+        bool alwaysOnTop = true;
+        bool accepted = false;
+    };
+
+    constexpr int CONFIG_SIZE_EDIT = 3001;
+    constexpr int CONFIG_FIXED_CHECK = 3002;
+    constexpr int CONFIG_TOPMOST_CHECK = 3003;
+    constexpr int CONFIG_OK = 3004;
+    constexpr int CONFIG_CANCEL = 3005;
+
+    LRESULT CALLBACK ConfigureDialogProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+    {
+        auto* state = reinterpret_cast<ConfigureDialogState*>(
+            GetWindowLongPtrW(hwnd, GWLP_USERDATA)
+        );
+
+        switch (message)
+        {
+        case WM_NCCREATE:
+        {
+            auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            SetWindowLongPtrW(
+                hwnd,
+                GWLP_USERDATA,
+                reinterpret_cast<LONG_PTR>(create->lpCreateParams)
+            );
+            return TRUE;
+        }
+
+        case WM_CREATE:
+        {
+            state = reinterpret_cast<ConfigureDialogState*>(
+                GetWindowLongPtrW(hwnd, GWLP_USERDATA)
+            );
+            if (!state || !state->item)
+                return -1;
+
+            HFONT font = CreatePingoFont(15, FW_NORMAL);
+
+            CreateWindowExW(0, L"STATIC", L"Tamanho do ícone (32–128 px)",
+                WS_CHILD | WS_VISIBLE, 20, 18, 300, 24, hwnd, nullptr, g_instance, nullptr);
+
+            wchar_t sizeText[16]{};
+            wsprintfW(sizeText, L"%d", state->size);
+            state->sizeEdit = CreateWindowExW(
+                WS_EX_CLIENTEDGE, L"EDIT", sizeText,
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_NUMBER | ES_AUTOHSCROLL,
+                20, 46, 100, 32, hwnd,
+                reinterpret_cast<HMENU>(CONFIG_SIZE_EDIT), g_instance, nullptr);
+
+            state->fixedCheck = CreateWindowExW(
+                0, L"BUTTON", L"Fixar posição",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+                20, 88, 260, 28, hwnd,
+                reinterpret_cast<HMENU>(CONFIG_FIXED_CHECK), g_instance, nullptr);
+
+            state->topmostCheck = CreateWindowExW(
+                0, L"BUTTON", L"Sempre sobre outras janelas",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+                20, 116, 260, 28, hwnd,
+                reinterpret_cast<HMENU>(CONFIG_TOPMOST_CHECK), g_instance, nullptr);
+
+            HWND okButton = CreateWindowExW(
+                0, L"BUTTON", L"Salvar",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+                190, 158, 80, 32, hwnd,
+                reinterpret_cast<HMENU>(CONFIG_OK), g_instance, nullptr);
+
+            HWND cancelButton = CreateWindowExW(
+                0, L"BUTTON", L"Cancelar",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+                278, 158, 80, 32, hwnd,
+                reinterpret_cast<HMENU>(CONFIG_CANCEL), g_instance, nullptr);
+
+            SendMessageW(state->sizeEdit, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+            SendMessageW(state->fixedCheck, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+            SendMessageW(state->topmostCheck, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+            SendMessageW(okButton, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+            SendMessageW(cancelButton, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+
+            SendMessageW(state->fixedCheck, BM_SETCHECK,
+                state->fixedPosition ? BST_CHECKED : BST_UNCHECKED, 0);
+            SendMessageW(state->topmostCheck, BM_SETCHECK,
+                state->alwaysOnTop ? BST_CHECKED : BST_UNCHECKED, 0);
+
+            SetPropW(hwnd, L"PingoConfigureFont", font);
+            SetFocus(state->sizeEdit);
+            SendMessageW(state->sizeEdit, EM_SETSEL, 0, -1);
+            return 0;
+        }
+
+        case WM_COMMAND:
+        {
+            const int command = LOWORD(wParam);
+            if (command == CONFIG_OK)
+            {
+                if (state && state->sizeEdit)
+                {
+                    wchar_t buffer[32]{};
+                    GetWindowTextW(state->sizeEdit, buffer, 32);
+                    const int parsed = _wtoi(buffer);
+                    if (parsed < 32 || parsed > 128)
+                    {
+                        MessageBoxW(hwnd, L"O tamanho deve estar entre 32 e 128 pixels.",
+                            L"Pingo App", MB_OK | MB_ICONWARNING);
+                        SetFocus(state->sizeEdit);
+                        return 0;
+                    }
+
+                    state->size = parsed;
+                    state->fixedPosition =
+                        SendMessageW(state->fixedCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
+                    state->alwaysOnTop =
+                        SendMessageW(state->topmostCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
+                    state->accepted = true;
+                }
+                DestroyWindow(hwnd);
+                return 0;
+            }
+
+            if (command == CONFIG_CANCEL)
+            {
+                DestroyWindow(hwnd);
+                return 0;
+            }
+            return 0;
+        }
+
+        case WM_KEYDOWN:
+            if (wParam == VK_ESCAPE)
+            {
+                DestroyWindow(hwnd);
+                return 0;
+            }
+            if (wParam == VK_RETURN)
+            {
+                SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(CONFIG_OK, BN_CLICKED), 0);
+                return 0;
+            }
+            break;
+
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return 0;
+
+        case WM_NCDESTROY:
+        {
+            HFONT font = static_cast<HFONT>(RemovePropW(hwnd, L"PingoConfigureFont"));
+            if (font)
+                DeleteObject(font);
+            return DefWindowProcW(hwnd, message, wParam, lParam);
+        }
+
+        default:
+            return DefWindowProcW(hwnd, message, wParam, lParam);
+        }
+
+        return DefWindowProcW(hwnd, message, wParam, lParam);
+    }
+
+    bool ConfigurePingoItem(HWND owner, PingoAppItem* item)
+    {
+        if (!item)
+            return false;
+
+        static bool registered = false;
+        constexpr wchar_t CONFIG_CLASS[] = L"PingoConfigureDialog";
+
+        if (!registered)
+        {
+            WNDCLASSW wc{};
+            wc.lpfnWndProc = ConfigureDialogProc;
+            wc.hInstance = g_instance;
+            wc.lpszClassName = CONFIG_CLASS;
+            wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+            wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH));
+
+            if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+                return false;
+            registered = true;
+        }
+
+        ConfigureDialogState state{};
+        state.item = item;
+        state.size = item->size;
+        state.fixedPosition = item->fixedPosition;
+        state.alwaysOnTop = item->alwaysOnTop;
+
+        RECT ownerRect{};
+        GetWindowRect(owner, &ownerRect);
+
+        const int width = 380;
+        const int height = 235;
+        const int x = ownerRect.left + ((ownerRect.right - ownerRect.left) - width) / 2;
+        const int y = ownerRect.top + ((ownerRect.bottom - ownerRect.top) - height) / 2;
+
+        HWND dialog = CreateWindowExW(
+            WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
+            CONFIG_CLASS,
+            L"Configurar aplicativo — Pingo App",
+            WS_CAPTION | WS_SYSMENU,
+            x, y, width, height,
+            owner, nullptr, g_instance, &state);
+
+        if (!dialog)
+            return false;
+
+        state.dialog = dialog;
+        EnableWindow(owner, FALSE);
+        ShowWindow(dialog, SW_SHOW);
+        UpdateWindow(dialog);
+
+        MSG msg{};
+        while (IsWindow(dialog) && GetMessageW(&msg, nullptr, 0, 0) > 0)
+        {
+            if (!IsDialogMessageW(dialog, &msg))
+            {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+
+        EnableWindow(owner, TRUE);
+        SetForegroundWindow(owner);
+
+        if (state.accepted)
+        {
+            item->size = state.size;
+            item->fixedPosition = state.fixedPosition;
+            item->alwaysOnTop = state.alwaysOnTop;
+            ApplyFloatingLayout(item);
+            SaveSettings(item);
+            InvalidateRect(item->floatingWindow, nullptr, FALSE);
+        }
+
+        return state.accepted;
+    }
+
     void ShowPingoContextMenu(HWND hwnd, PingoAppItem* item, POINT screenPoint)
     {
         if (!item)
@@ -1005,6 +1279,9 @@ namespace
             break;
 
         case PingoMenuCommand::Configure:
+            ConfigurePingoItem(hwnd, item);
+            break;
+
         default:
             break;
         }
@@ -1044,7 +1321,7 @@ namespace
         }
 
         case WM_LBUTTONDOWN:
-            if (item)
+            if (item && !item->fixedPosition)
             {
                 ReleaseCapture();
                 SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
@@ -1149,8 +1426,8 @@ namespace
             WS_POPUP,
             item->position.x,
             item->position.y,
-            FLOATING_ICON_WIDTH,
-            FLOATING_ICON_HEIGHT,
+            GetFloatingWidth(item),
+            GetFloatingHeight(item),
             owner,
             nullptr,
             hInstance,
@@ -1171,6 +1448,15 @@ namespace
 
         ShowWindow(floating, SW_SHOWNOACTIVATE);
         UpdateWindow(floating);
+        SetWindowPos(
+            floating,
+            item->alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+            item->position.x,
+            item->position.y,
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW
+        );
         return true;
     }
 
@@ -1553,14 +1839,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
                 g_currentItem->fixedPosition = savedItem.fixedPosition;
                 g_currentItem->alwaysOnTop = savedItem.alwaysOnTop;
 
-                SetWindowPos(
-                    g_currentItem->floatingWindow,
-                    g_currentItem->alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
-                    g_currentItem->position.x,
-                    g_currentItem->position.y,
-                    0,
-                    0,
-                    SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                ApplyFloatingLayout(g_currentItem);
 
                 InvalidateRect(g_currentItem->floatingWindow, nullptr, FALSE);
             }
