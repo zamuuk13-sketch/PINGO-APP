@@ -357,6 +357,98 @@ namespace
         );
     }
 
+    enum class PingoMenuCommand : UINT
+    {
+        Open = 1001,
+        Rename,
+        LocateFile,
+        RunAsAdministrator,
+        Remove,
+        Configure
+    };
+
+    void OpenPingoItem(HWND hwnd, PingoAppItem* item)
+    {
+        if (!item || item->path.empty())
+            return;
+
+        ShellExecuteW(hwnd, L"open", item->path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    }
+
+    void LocatePingoItem(HWND hwnd, PingoAppItem* item)
+    {
+        if (!item || item->path.empty())
+            return;
+
+        std::wstring command = L"/select,\"" + item->path + L"\"";
+        ShellExecuteW(hwnd, L"open", L"explorer.exe", command.c_str(), nullptr, SW_SHOWNORMAL);
+    }
+
+    void RunPingoItemAsAdministrator(HWND hwnd, PingoAppItem* item)
+    {
+        if (!item || item->path.empty())
+            return;
+
+        ShellExecuteW(hwnd, L"runas", item->path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    }
+
+    void ShowPingoContextMenu(HWND hwnd, PingoAppItem* item, POINT screenPoint)
+    {
+        if (!item)
+            return;
+
+        HMENU menu = CreatePopupMenu();
+        if (!menu)
+            return;
+
+        AppendMenuW(menu, MF_STRING, static_cast<UINT>(PingoMenuCommand::Open), L"Abrir");
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(menu, MF_STRING, static_cast<UINT>(PingoMenuCommand::Rename), L"Renomear");
+        AppendMenuW(menu, MF_STRING, static_cast<UINT>(PingoMenuCommand::LocateFile), L"Localizar arquivo");
+        AppendMenuW(menu, MF_STRING, static_cast<UINT>(PingoMenuCommand::RunAsAdministrator), L"Executar como administrador");
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(menu, MF_STRING, static_cast<UINT>(PingoMenuCommand::Configure), L"Configurar");
+        AppendMenuW(menu, MF_STRING, static_cast<UINT>(PingoMenuCommand::Remove), L"Remover");
+
+        SetForegroundWindow(hwnd);
+
+        const UINT command = TrackPopupMenuEx(
+            menu,
+            TPM_RETURNCMD | TPM_RIGHTBUTTON,
+            screenPoint.x,
+            screenPoint.y,
+            hwnd,
+            nullptr
+        );
+
+        DestroyMenu(menu);
+
+        switch (static_cast<PingoMenuCommand>(command))
+        {
+        case PingoMenuCommand::Open:
+            OpenPingoItem(hwnd, item);
+            break;
+
+        case PingoMenuCommand::LocateFile:
+            LocatePingoItem(hwnd, item);
+            break;
+
+        case PingoMenuCommand::RunAsAdministrator:
+            RunPingoItemAsAdministrator(hwnd, item);
+            break;
+
+        case PingoMenuCommand::Remove:
+            DestroyAppItem(g_currentItem);
+            break;
+
+        case PingoMenuCommand::Rename:
+        case PingoMenuCommand::Configure:
+        case PingoMenuCommand::Open:
+        default:
+            break;
+        }
+    }
+
     LRESULT CALLBACK FloatingWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         PingoAppItem* item =
@@ -395,6 +487,17 @@ namespace
             {
                 ReleaseCapture();
                 SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+            }
+            return 0;
+
+        case WM_RBUTTONUP:
+            if (item)
+            {
+                POINT point{};
+                point.x = GET_X_LPARAM(lParam);
+                point.y = GET_Y_LPARAM(lParam);
+                ClientToScreen(hwnd, &point);
+                ShowPingoContextMenu(hwnd, item, point);
             }
             return 0;
 
