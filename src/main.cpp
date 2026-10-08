@@ -3,7 +3,9 @@
 #include <ole2.h>
 #include <oleidl.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <string>
+#include <fstream>
 #include <cwchar>
 
 namespace
@@ -38,12 +40,273 @@ namespace
         POINT position{120, 180};
         int size = 72;
         HWND floatingWindow = nullptr;
+        bool fixedPosition = false;
+        bool alwaysOnTop = true;
     };
 
     bool g_isDragOver = false;
     bool g_oleDropRegistered = false;
     PingoAppItem* g_currentItem = nullptr;
+
     HINSTANCE g_instance = nullptr;
+
+    std::wstring GetSettingsDirectory()
+    {
+        wchar_t appData[MAX_PATH]{};
+        if (FAILED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, appData)))
+            return {};
+
+        return std::wstring(appData) + L"\\Pingo App";
+    }
+
+    std::wstring GetSettingsPath()
+    {
+        const std::wstring directory = GetSettingsDirectory();
+        return directory.empty() ? std::wstring{} : directory + L"\\settings.json";
+    }
+
+    bool EnsureSettingsDirectory()
+    {
+        const std::wstring directory = GetSettingsDirectory();
+        if (directory.empty())
+            return false;
+
+        if (CreateDirectoryW(directory.c_str(), nullptr))
+            return true;
+
+        return GetLastError() == ERROR_ALREADY_EXISTS;
+    }
+
+    std::string EscapeJson(const std::wstring& value)
+    {
+        int size = WideCharToMultiByte(CP_UTF8, 0, value.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        if (size <= 1)
+            return {};
+
+        std::string utf8(size - 1, '\0');
+        WideCharToMultiByte(CP_UTF8, 0, value.c_str(), -1, utf8.data(), size, nullptr, nullptr);
+
+        std::string result;
+        result.reserve(utf8.size() + 16);
+        for (char c : utf8)
+        {
+            switch (c)
+            {
+            case '\\': result += "\\\\"; break;
+            case '"': result += "\\\""; break;
+            case '\n': result += "\\n"; break;
+            case '\r': result += "\\r"; break;
+            case '\t': result += "\\t"; break;
+            default: result += c; break;
+            }
+        }
+        return result;
+    }
+
+    std::wstring UnescapeJson(const std::string& value)
+    {
+        std::string decoded;
+        decoded.reserve(value.size());
+
+        bool escaped = false;
+        for (char c : value)
+        {
+            if (escaped)
+            {
+                switch (c)
+                {
+                case '\\': decoded += '\\'; break;
+                case '"': decoded += '"'; break;
+                case 'n': decoded += '\n'; break;
+                case 'r': decoded += '\r'; break;
+                case 't': decoded += '\t'; break;
+                default: decoded += c; break;
+                }
+                escaped = false;
+            }
+            else if (c == '\\')
+            {
+                escaped = true;
+            }
+            else
+            {
+                decoded += c;
+            }
+        }
+
+        const int length = MultiByteToWideChar(
+            CP_UTF8, 0, decoded.data(), static_cast<int>(decoded.size()), nullptr, 0);
+
+        if (length <= 0)
+            return {};
+
+        std::wstring result(length, L'\0');
+        MultiByteToWideChar(
+            CP_UTF8, 0, decoded.data(), static_cast<int>(decoded.size()), result.data(), length);
+        return result;
+    }
+
+    bool ReadJsonString(const std::string& json, const char* key, std::wstring& value)
+    {
+        const std::string token = std::string("\"") + key + "\"";
+        const size_t keyPosition = json.find(token);
+        if (keyPosition == std::string::npos)
+            return false;
+
+        const size_t colon = json.find(':', keyPosition + token.size());
+        const size_t openingQuote = json.find('"', colon + 1);
+        if (colon == std::string::npos || openingQuote == std::string::npos)
+            return false;
+
+        std::string encoded;
+        bool escaped = false;
+        for (size_t i = openingQuote + 1; i < json.size(); ++i)
+        {
+            const char c = json[i];
+            if (escaped)
+            {
+                encoded += '\\';
+                encoded += c;
+                escaped = false;
+            }
+            else if (c == '\\')
+            {
+                escaped = true;
+            }
+            else if (c == '"')
+            {
+                value = UnescapeJson(encoded);
+                return true;
+            }
+            else
+            {
+                encoded += c;
+            }
+        }
+        return false;
+    }
+
+    bool ReadJsonInt(const std::string& json, const char* key, int& value)
+    {
+        const std::string token = std::string("\"") + key + "\"";
+        const size_t keyPosition = json.find(token);
+        if (keyPosition == std::string::npos)
+            return false;
+
+        const size_t colon = json.find(':', keyPosition + token.size());
+        if (colon == std::string::npos)
+            return false;
+
+        try
+        {
+            value = std::stoi(json.substr(colon + 1));
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    bool ReadJsonBool(const std::string& json, const char* key, bool& value)
+    {
+        const std::string token = std::string("\"") + key + "\"";
+        const size_t keyPosition = json.find(token);
+        if (keyPosition == std::string::npos)
+            return false;
+
+        const size_t colon = json.find(':', keyPosition + token.size());
+        if (colon == std::string::npos)
+            return false;
+
+        const size_t truePosition = json.find("true", colon + 1);
+        const size_t falsePosition = json.find("false", colon + 1);
+
+        if (truePosition != std::string::npos &&
+            (falsePosition == std::string::npos || truePosition < falsePosition))
+        {
+            value = true;
+            return true;
+        }
+
+        if (falsePosition != std::string::npos)
+        {
+            value = false;
+            return true;
+        }
+
+        return false;
+    }
+
+    void SaveSettings(const PingoAppItem* item)
+    {
+        if (!item || !EnsureSettingsDirectory())
+            return;
+
+        const std::wstring settingsPath = GetSettingsPath();
+        if (settingsPath.empty())
+            return;
+
+        const std::string tempPath = "settings.json.tmp";
+        std::ofstream file(
+            std::wstring(settingsPath + L".tmp"),
+            std::ios::binary | std::ios::trunc);
+
+        if (!file)
+            return;
+
+        file << "{\n"
+             << "  \"path\": \"" << EscapeJson(item->path) << "\",\n"
+             << "  \"name\": \"" << EscapeJson(item->name) << "\",\n"
+             << "  \"position\": {\n"
+             << "    \"x\": " << item->position.x << ",\n"
+             << "    \"y\": " << item->position.y << "\n"
+             << "  },\n"
+             << "  \"size\": " << item->size << ",\n"
+             << "  \"fixedPosition\": " << (item->fixedPosition ? "true" : "false") << ",\n"
+             << "  \"alwaysOnTop\": " << (item->alwaysOnTop ? "true" : "false") << ",\n"
+             << "  \"settingsVersion\": 1\n"
+             << "}\n";
+
+        file.close();
+        MoveFileExW(
+            (settingsPath + L".tmp").c_str(),
+            settingsPath.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    }
+
+    bool LoadSettings(PingoAppItem& item)
+    {
+        const std::wstring settingsPath = GetSettingsPath();
+        if (settingsPath.empty())
+            return false;
+
+        std::ifstream file(settingsPath, std::ios::binary);
+        if (!file)
+            return false;
+
+        const std::string json(
+            (std::istreambuf_iterator<char>(file)),
+            std::istreambuf_iterator<char>());
+
+        if (json.empty())
+            return false;
+
+        ReadJsonString(json, "path", item.path);
+        ReadJsonString(json, "name", item.name);
+        ReadJsonInt(json, "x", item.position.x);
+        ReadJsonInt(json, "y", item.position.y);
+        ReadJsonInt(json, "size", item.size);
+        ReadJsonBool(json, "fixedPosition", item.fixedPosition);
+        ReadJsonBool(json, "alwaysOnTop", item.alwaysOnTop);
+
+        return !item.path.empty() && IsExeFile(item.path.c_str());
+    }
+
+    void SaveCurrentSettings()
+    {
+        SaveSettings(g_currentItem);
+    }
 
     HFONT CreatePingoFont(int size, int weight)
     {
@@ -828,6 +1091,7 @@ namespace
                 {
                     item->position.x = windowRect.left;
                     item->position.y = windowRect.top;
+                    SaveSettings(item);
                 }
             }
             return 0;
@@ -948,6 +1212,7 @@ namespace
 
         DestroyAppItem(g_currentItem);
         g_currentItem = CreatePingoAppItem(hwnd, hInstance, path);
+        SaveCurrentSettings();
         InvalidateRect(hwnd, nullptr, FALSE);
     }
 
@@ -1259,6 +1524,38 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
     {
         dropTarget->Release();
         DragAcceptFiles(hwnd, TRUE);
+    }
+
+    PingoAppItem savedItem{};
+    if (LoadSettings(savedItem))
+    {
+        const DWORD attributes = GetFileAttributesW(savedItem.path.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES &&
+            !(attributes & FILE_ATTRIBUTE_DIRECTORY))
+        {
+            g_currentItem = CreatePingoAppItem(hwnd, hInstance, savedItem.path);
+            if (g_currentItem)
+            {
+                g_currentItem->name = savedItem.name.empty()
+                    ? g_currentItem->name
+                    : savedItem.name;
+                g_currentItem->position = savedItem.position;
+                g_currentItem->size = savedItem.size;
+                g_currentItem->fixedPosition = savedItem.fixedPosition;
+                g_currentItem->alwaysOnTop = savedItem.alwaysOnTop;
+
+                SetWindowPos(
+                    g_currentItem->floatingWindow,
+                    g_currentItem->alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+                    g_currentItem->position.x,
+                    g_currentItem->position.y,
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+                InvalidateRect(g_currentItem->floatingWindow, nullptr, FALSE);
+            }
+        }
     }
 
     ShowWindow(hwnd, nCmdShow);
