@@ -18,10 +18,17 @@ namespace
     constexpr int WINDOW_WIDTH = 800;
     constexpr int WINDOW_HEIGHT = 500;
 
+    struct PingoAppItem
+    {
+        std::wstring path;
+        std::wstring name;
+        HICON icon = nullptr;
+        POINT position{120, 180};
+        int size = 72;
+    };
+
     bool g_isDragOver = false;
-    std::wstring g_appPath;
-    std::wstring g_appName;
-    HICON g_appIcon = nullptr;
+    PingoAppItem* g_currentItem = nullptr;
 
     HFONT CreatePingoFont(int size, int weight)
     {
@@ -176,6 +183,28 @@ namespace
         return largeIcon;
     }
 
+    void DestroyAppItem(PingoAppItem*& item)
+    {
+        if (!item)
+            return;
+
+        if (item->icon)
+            DestroyIcon(item->icon);
+
+        delete item;
+        item = nullptr;
+    }
+
+    PingoAppItem* CreatePingoAppItem(const std::wstring& path)
+    {
+        auto* item = new PingoAppItem;
+        item->path = path;
+        item->name = GetExecutableName(path);
+        item->icon = ExtractExecutableIcon(path);
+
+        return item;
+    }
+
     void HandleDroppedFile(HWND hwnd, HDROP drop)
     {
         const UINT fileCount = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
@@ -190,22 +219,13 @@ namespace
             if (!IsExeFile(path))
                 continue;
 
-            g_appPath = path;
-            g_appName = GetExecutableName(g_appPath);
-
-            if (g_appIcon)
-            {
-                DestroyIcon(g_appIcon);
-                g_appIcon = nullptr;
-            }
-
-            g_appIcon = ExtractExecutableIcon(g_appPath);
+            DestroyAppItem(g_currentItem);
+            g_currentItem = CreatePingoAppItem(path);
 
             std::wstring message =
-                L"Aplicativo: " + g_appName +
-                L"\nIcone: " +
-                (g_appIcon ? L"detectado" : L"nao encontrado") +
-                L"\n\nCaminho:\n" + g_appPath;
+                L"Item criado!\n\n" +
+                g_currentItem->name +
+                L"\n\nO Pingo ja possui os dados necessarios para criar o icone flutuante.";
 
             MessageBoxW(
                 hwnd,
@@ -241,12 +261,7 @@ namespace
             return 0;
 
         case WM_DESTROY:
-            if (g_appIcon)
-            {
-                DestroyIcon(g_appIcon);
-                g_appIcon = nullptr;
-            }
-
+            DestroyAppItem(g_currentItem);
             PostQuitMessage(0);
             return 0;
 
