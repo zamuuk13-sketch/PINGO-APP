@@ -5,6 +5,22 @@ namespace
     constexpr wchar_t WINDOW_CLASS[] = L"PingoAppWindow";
     constexpr wchar_t WINDOW_TITLE[] = L"Pingo App";
 
+    constexpr COLORREF BACKGROUND = RGB(13, 13, 13);
+    constexpr COLORREF SURFACE = RGB(22, 22, 22);
+    constexpr COLORREF BORDER = RGB(48, 48, 48);
+    constexpr COLORREF TEXT_PRIMARY = RGB(255, 255, 255);
+    constexpr COLORREF TEXT_SECONDARY = RGB(165, 165, 165);
+
+    HFONT CreatePingoFont(int size, int weight)
+    {
+        return CreateFontW(
+            size, 0, 0, 0, weight, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+            L"Segoe UI Variable"
+        );
+    }
+
     LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         switch (message)
@@ -21,38 +37,31 @@ namespace
             RECT client{};
             GetClientRect(hwnd, &client);
 
-            HBRUSH background = CreateSolidBrush(RGB(245, 245, 245));
+            HBRUSH background = CreateSolidBrush(BACKGROUND);
             FillRect(hdc, &client, background);
             DeleteObject(background);
 
             SetBkMode(hdc, TRANSPARENT);
 
-            HFONT titleFont = CreateFontW(
-                28, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI"
-            );
+            HFONT titleFont = CreatePingoFont(30, FW_SEMIBOLD);
             HFONT oldFont = static_cast<HFONT>(SelectObject(hdc, titleFont));
-            SetTextColor(hdc, RGB(30, 30, 30));
+            SetTextColor(hdc, TEXT_PRIMARY);
 
-            RECT titleRect{32, 28, client.right - 32, 70};
-            DrawTextW(hdc, L"Pingo App", -1, &titleRect, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+            RECT titleRect{32, 28, client.right - 32, 72};
+            DrawTextW(hdc, L"Pingo App", -1, &titleRect,
+                      DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
             SelectObject(hdc, oldFont);
             DeleteObject(titleFont);
 
-            HFONT subtitleFont = CreateFontW(
-                16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI"
-            );
+            HFONT subtitleFont = CreatePingoFont(16, FW_NORMAL);
             oldFont = static_cast<HFONT>(SelectObject(hdc, subtitleFont));
-            SetTextColor(hdc, RGB(90, 90, 90));
+            SetTextColor(hdc, TEXT_SECONDARY);
 
-            RECT subtitleRect{34, 76, client.right - 32, 110};
+            RECT subtitleRect{34, 76, client.right - 32, 108};
             DrawTextW(
                 hdc,
-                L"Arraste um aplicativo para adicionar um icone flutuante.",
+                L"Adicione aplicativos e deixe seus icones flutuando pela tela.",
                 -1,
                 &subtitleRect,
                 DT_LEFT | DT_SINGLELINE | DT_VCENTER
@@ -63,8 +72,8 @@ namespace
 
             RECT dropRect{32, 135, client.right - 32, client.bottom - 32};
 
-            HPEN borderPen = CreatePen(PS_SOLID, 2, RGB(190, 190, 190));
-            HBRUSH dropBrush = CreateSolidBrush(RGB(255, 255, 255));
+            HPEN borderPen = CreatePen(PS_SOLID, 1, BORDER);
+            HBRUSH dropBrush = CreateSolidBrush(SURFACE);
             HPEN oldPen = static_cast<HPEN>(SelectObject(hdc, borderPen));
             HBRUSH oldBrush = static_cast<HBRUSH>(SelectObject(hdc, dropBrush));
 
@@ -80,13 +89,9 @@ namespace
             DeleteObject(dropBrush);
             DeleteObject(borderPen);
 
-            HFONT dropFont = CreateFontW(
-                18, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE,
-                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI"
-            );
+            HFONT dropFont = CreatePingoFont(18, FW_MEDIUM);
             oldFont = static_cast<HFONT>(SelectObject(hdc, dropFont));
-            SetTextColor(hdc, RGB(75, 75, 75));
+            SetTextColor(hdc, TEXT_PRIMARY);
 
             RECT dropTextRect{
                 dropRect.left + 20,
@@ -123,7 +128,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
     wc.hInstance = hInstance;
     wc.lpszClassName = WINDOW_CLASS;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH));
+    wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
 
     if (!RegisterClassW(&wc))
         return 0;
