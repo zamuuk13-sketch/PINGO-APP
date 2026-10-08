@@ -38,7 +38,7 @@ A **Etapa 17** adicionou o painel **Configurar**, acessível pelo botão direito
 
 A **Etapa 18** implementou o modo **Sempre sobre outras janelas** como uma ação direta no menu do ícone. A opção aparece com marcação quando está ativa, pode ser ligada/desligada instantaneamente e a preferência continua salva no `settings.json`.
 
-A **Etapa 19** adicionou o **Modo normal** como uma opção própria no mesmo menu. Ele remove o estado TOPMOST do ícone, permite que outras janelas fiquem sobre ele e também salva a escolha para a próxima inicialização.
+A **Etapa 19** implementou a opção **Não sobrepor outros aplicativos**. O comportamento padrão continua sendo manter o ícone sobre outras janelas; quando essa opção é ativada, o ícone deixa de ser TOPMOST e outras janelas podem ficar sobre ele. A preferência é salva no `settings.json`.
 
 A **Etapa 20** adicionou **Posição fixa** diretamente ao menu do ícone. Quando ativada, o ícone não pode mais ser arrastado; quando desativada, o arraste volta imediatamente. O estado continua salvo no `settings.json`.
 
