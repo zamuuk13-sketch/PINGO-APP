@@ -22,11 +22,11 @@ O projeto será desenvolvido em **C++**, utilizando recursos nativos do Windows 
 
 ## 📍 Status
 
-**Etapa 15 — Em desenvolvimento** 🚧
+**Etapa 16 — Em desenvolvimento** 🚧
 
-As etapas 1–15 já foram implementadas. A **Etapa 14 — localizar arquivo** foi formalmente finalizada: o menu de contexto abre o Windows Explorer já selecionando o executável original do aplicativo. A **Etapa 15 — executar como administrador** utiliza o fluxo nativo de elevação do Windows (UAC) e trata falhas sem interromper o aplicativo.
+As etapas 1–16 já foram implementadas. Na **Etapa 16 — remover aplicativo**, o Pingo agora pede confirmação antes de remover um ícone. A remoção apaga apenas o item do Pingo e **não exclui o arquivo `.exe` original**.
 
-A próxima etapa planejada é a **Etapa 16 — remover aplicativo**.
+A próxima etapa planejada é a **Etapa 17 — redimensionar/configurar o ícone**.
 
 ## 🎯 Objetivo
 
