@@ -398,6 +398,26 @@ namespace
             }
             return 0;
 
+        case WM_LBUTTONDBLCLK:
+            if (item && !item->path.empty())
+            {
+                HINSTANCE result = ShellExecuteW(
+                    hwnd,
+                    L"open",
+                    item->path.c_str(),
+                    nullptr,
+                    nullptr,
+                    SW_SHOWNORMAL
+                );
+
+                if (reinterpret_cast<INT_PTR>(result) <= 32)
+                {
+                    // Keep the launcher silent on normal use; failed launches
+                    // will be handled by the future context menu/error UI.
+                }
+            }
+            return 0;
+
         case WM_EXITSIZEMOVE:
             if (item)
             {
