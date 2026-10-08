@@ -393,6 +393,266 @@ namespace
         ShellExecuteW(hwnd, L"runas", item->path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }
 
+
+    struct RenameDialogState
+    {
+        PingoAppItem* item = nullptr;
+        HWND dialog = nullptr;
+        HWND edit = nullptr;
+        bool accepted = false;
+    };
+
+    constexpr int RENAME_EDIT = 2001;
+    constexpr int RENAME_OK = 2002;
+    constexpr int RENAME_CANCEL = 2003;
+
+    LRESULT CALLBACK RenameDialogProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+    {
+        auto* state = reinterpret_cast<RenameDialogState*>(
+            GetWindowLongPtrW(hwnd, GWLP_USERDATA)
+        );
+
+        switch (message)
+        {
+        case WM_NCCREATE:
+        {
+            auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            SetWindowLongPtrW(
+                hwnd,
+                GWLP_USERDATA,
+                reinterpret_cast<LONG_PTR>(create->lpCreateParams)
+            );
+            return TRUE;
+        }
+
+        case WM_CREATE:
+        {
+            state = reinterpret_cast<RenameDialogState*>(
+                GetWindowLongPtrW(hwnd, GWLP_USERDATA)
+            );
+
+            if (!state || !state->item)
+                return -1;
+
+            HFONT font = CreatePingoFont(16, FW_NORMAL);
+
+            CreateWindowExW(
+                0,
+                L"STATIC",
+                L"Novo nome",
+                WS_CHILD | WS_VISIBLE,
+                20, 18, 320, 26,
+                hwnd,
+                nullptr,
+                g_instance,
+                nullptr
+            );
+
+            state->edit = CreateWindowExW(
+                WS_EX_CLIENTEDGE,
+                L"EDIT",
+                state->item->name.c_str(),
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+                20, 50, 320, 34,
+                hwnd,
+                reinterpret_cast<HMENU>(RENAME_EDIT),
+                g_instance,
+                nullptr
+            );
+
+            HWND okButton = CreateWindowExW(
+                0,
+                L"BUTTON",
+                L"Salvar",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+                174, 98, 80, 32,
+                hwnd,
+                reinterpret_cast<HMENU>(RENAME_OK),
+                g_instance,
+                nullptr
+            );
+
+            HWND cancelButton = CreateWindowExW(
+                0,
+                L"BUTTON",
+                L"Cancelar",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+                260, 98, 80, 32,
+                hwnd,
+                reinterpret_cast<HMENU>(RENAME_CANCEL),
+                g_instance,
+                nullptr
+            );
+
+            SendMessageW(state->edit, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+            SendMessageW(okButton, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+            SendMessageW(cancelButton, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+
+            SetPropW(hwnd, L"PingoRenameFont", font);
+
+            SetFocus(state->edit);
+            SendMessageW(
+                state->edit,
+                EM_SETSEL,
+                0,
+                static_cast<LPARAM>(-1)
+            );
+
+            return 0;
+        }
+
+        case WM_COMMAND:
+        {
+            const int command = LOWORD(wParam);
+
+            if (command == RENAME_OK)
+            {
+                if (state && state->edit && state->item)
+                {
+                    wchar_t buffer[512]{};
+                    GetWindowTextW(state->edit, buffer, 512);
+
+                    std::wstring newName = buffer;
+                    if (!newName.empty())
+                    {
+                        state->item->name = newName;
+                        state->accepted = true;
+                    }
+                }
+
+                DestroyWindow(hwnd);
+                return 0;
+            }
+
+            if (command == RENAME_CANCEL)
+            {
+                DestroyWindow(hwnd);
+                return 0;
+            }
+
+            return 0;
+        }
+
+        case WM_KEYDOWN:
+            if (wParam == VK_ESCAPE)
+            {
+                DestroyWindow(hwnd);
+                return 0;
+            }
+
+            if (wParam == VK_RETURN)
+            {
+                SendMessageW(
+                    hwnd,
+                    WM_COMMAND,
+                    MAKEWPARAM(RENAME_OK, BN_CLICKED),
+                    0
+                );
+                return 0;
+            }
+            break;
+
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return 0;
+
+        case WM_NCDESTROY:
+        {
+            HFONT font = static_cast<HFONT>(
+                RemovePropW(hwnd, L"PingoRenameFont")
+            );
+
+            if (font)
+                DeleteObject(font);
+
+            return DefWindowProcW(hwnd, message, wParam, lParam);
+        }
+
+        default:
+            return DefWindowProcW(hwnd, message, wParam, lParam);
+        }
+
+        return DefWindowProcW(hwnd, message, wParam, lParam);
+    }
+
+    bool RenamePingoItem(HWND owner, PingoAppItem* item)
+    {
+        if (!item)
+            return false;
+
+        static bool registered = false;
+
+        constexpr wchar_t RENAME_CLASS[] = L"PingoRenameDialog";
+
+        if (!registered)
+        {
+            WNDCLASSW wc{};
+            wc.lpfnWndProc = RenameDialogProc;
+            wc.hInstance = g_instance;
+            wc.lpszClassName = RENAME_CLASS;
+            wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+            wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH));
+
+            if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+                return false;
+
+            registered = true;
+        }
+
+        RenameDialogState state{};
+        state.item = item;
+
+        RECT ownerRect{};
+        GetWindowRect(owner, &ownerRect);
+
+        const int width = 370;
+        const int height = 165;
+        const int x = ownerRect.left + ((ownerRect.right - ownerRect.left) - width) / 2;
+        const int y = ownerRect.top + ((ownerRect.bottom - ownerRect.top) - height) / 2;
+
+        HWND dialog = CreateWindowExW(
+            WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
+            RENAME_CLASS,
+            L\"Renomear aplicativo — Pingo App\",
+            WS_CAPTION | WS_SYSMENU,
+            x,
+            y,
+            width,
+            height,
+            owner,
+            nullptr,
+            g_instance,
+            &state
+        );
+
+        if (!dialog)
+            return false;
+
+        state.dialog = dialog;
+
+        EnableWindow(owner, FALSE);
+        ShowWindow(dialog, SW_SHOW);
+        UpdateWindow(dialog);
+
+        MSG msg{};
+        while (IsWindow(dialog) && GetMessageW(&msg, nullptr, 0, 0) > 0)
+        {
+            if (!IsDialogMessageW(dialog, &msg))
+            {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+
+        EnableWindow(owner, TRUE);
+        SetForegroundWindow(owner);
+
+        if (state.accepted && item->floatingWindow)
+            InvalidateRect(item->floatingWindow, nullptr, FALSE);
+
+        return state.accepted;
+    }
+
     void ShowPingoContextMenu(HWND hwnd, PingoAppItem* item, POINT screenPoint)
     {
         if (!item)
@@ -443,6 +703,9 @@ namespace
             break;
 
         case PingoMenuCommand::Rename:
+            RenamePingoItem(hwnd, item);
+            break;
+
         case PingoMenuCommand::Configure:
         default:
             break;
