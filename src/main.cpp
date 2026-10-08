@@ -247,7 +247,6 @@ namespace
         if (settingsPath.empty())
             return;
 
-        const std::string tempPath = "settings.json.tmp";
         std::ofstream file(
             std::wstring(settingsPath + L".tmp"),
             std::ios::binary | std::ios::trunc);
@@ -935,8 +934,12 @@ namespace
         EnableWindow(owner, TRUE);
         SetForegroundWindow(owner);
 
-        if (state.accepted && item->floatingWindow)
-            InvalidateRect(item->floatingWindow, nullptr, FALSE);
+        if (state.accepted)
+        {
+            SaveSettings(item);
+            if (item->floatingWindow)
+                InvalidateRect(item->floatingWindow, nullptr, FALSE);
+        }
 
         return state.accepted;
     }
@@ -1080,8 +1083,14 @@ namespace
             return 0;
 
         case WM_PINGO_REMOVE_ITEM:
+        {
+            const std::wstring settingsPath = GetSettingsPath();
+            if (!settingsPath.empty())
+                DeleteFileW(settingsPath.c_str());
+
             DestroyAppItem(g_currentItem);
             return 0;
+        }
 
         case WM_EXITSIZEMOVE:
             if (item)
