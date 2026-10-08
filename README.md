@@ -30,9 +30,9 @@ O projeto será desenvolvido em **C++**, utilizando recursos nativos do Windows 
 
 ## 📍 Status
 
-**Etapa 20 — Em desenvolvimento** 🚧
+**Etapa 21 — Em desenvolvimento** 🚧
 
-As etapas 1–18 já foram implementadas. O sistema de **configurações persistentes** restaura automaticamente o estado salvo do ícone ao abrir o Pingo, e a remoção do aplicativo apaga o arquivo de configuração correspondente.
+As etapas 1–21 já foram implementadas. O sistema de **configurações persistentes** restaura automaticamente o estado salvo do ícone ao abrir o Pingo, e a remoção do aplicativo apaga o arquivo de configuração correspondente.
 
 A **Etapa 17** adicionou o painel **Configurar**, acessível pelo botão direito, com tamanho, posição fixa e as opções de comportamento do ícone.
 
@@ -45,3 +45,6 @@ A **Etapa 20** adicionou **Posição fixa** diretamente ao menu do ícone. Quand
 ## 🎯 Objetivo
 
 Criar uma ferramenta pequena, rápida e prática para deixar os aplicativos favoritos acessíveis diretamente na tela, sem transformar o projeto em um launcher complexo.
+
+
+A **Etapa 21** foi validada no código existente: as alterações do ícone são gravadas automaticamente em `%APPDATA%\\Pingo App\\settings.json`, incluindo nome, posição, tamanho, posição fixa e preferência de sobreposição. O arquivo temporário é substituído de forma atômica para reduzir o risco de corromper as configurações.
