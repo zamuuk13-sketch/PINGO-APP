@@ -3,6 +3,7 @@
 #include <oleidl.h>
 #include <shellapi.h>
 #include <string>
+#include <cwchar>
 
 namespace
 {
@@ -40,7 +41,6 @@ namespace
     bool g_isDragOver = false;
     bool g_oleDropRegistered = false;
     PingoAppItem* g_currentItem = nullptr;
-    HWND g_mainWindow = nullptr;
     HINSTANCE g_instance = nullptr;
 
     HFONT CreatePingoFont(int size, int weight)
@@ -696,36 +696,7 @@ namespace
             format.lindex = -1;
             format.tymed = TYMED_HGLOBAL;
 
-            STGMEDIUM medium{};
-            if (FAILED(dataObject->GetData(&format, &medium)))
-                return false;
-
-            bool hasExe = false;
-            HDROP drop = static_cast<HDROP>(GlobalLock(medium.hGlobal));
-
-            if (drop)
-            {
-                const UINT fileCount = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
-
-                for (UINT i = 0; i < fileCount && !hasExe; ++i)
-                {
-                    const UINT required = DragQueryFileW(drop, i, nullptr, 0);
-                    if (required == 0)
-                        continue;
-
-                    std::wstring path(required + 1, L'\0');
-                    if (DragQueryFileW(drop, i, path.data(), required + 1) != 0)
-                    {
-                        path.resize(required);
-                        hasExe = IsExeFile(path.c_str());
-                    }
-                }
-
-                GlobalUnlock(medium.hGlobal);
-            }
-
-            ReleaseStgMedium(&medium);
-            return hasExe;
+            return SUCCEEDED(dataObject->QueryGetData(&format));
         }
 
         ULONG referenceCount_ = 1;
@@ -753,6 +724,12 @@ namespace
             return 0;
 
         case WM_DESTROY:
+            if (g_oleDropRegistered)
+            {
+                RevokeDragDrop(hwnd);
+                g_oleDropRegistered = false;
+            }
+
             DestroyAppItem(g_currentItem);
             PostQuitMessage(0);
             return 0;
@@ -829,7 +806,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
     wc.style = CS_HREDRAW | CS_VREDRAW;
 
     if (!RegisterClassW(&wc))
+    {
+        OleUninitialize();
         return 0;
+    }
 
     HWND hwnd = CreateWindowExW(
         0,
@@ -847,8 +827,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
         return 0;
     }
 
-    g_mainWindow = hwnd;
-
     auto* dropTarget = new PingoDropTarget(hwnd, hInstance);
     if (SUCCEEDED(RegisterDragDrop(hwnd, dropTarget)))
     {
@@ -858,8 +836,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
     else
     {
         dropTarget->Release();
-        SetWindowLongPtrW(hwnd, GWLP_EXSTYLE,
-            GetWindowLongPtrW(hwnd, GWLP_EXSTYLE) | WS_EX_ACCEPTFILES);
         DragAcceptFiles(hwnd, TRUE);
     }
 
@@ -873,11 +849,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
         DispatchMessageW(&msg);
     }
 
-    if (g_oleDropRegistered)
-        RevokeDragDrop(hwnd);
-
     g_oleDropRegistered = false;
-    g_mainWindow = nullptr;
     OleUninitialize();
 
     return static_cast<int>(msg.wParam);
