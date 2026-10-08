@@ -15,6 +15,8 @@ namespace
     constexpr COLORREF BORDER_ACTIVE = RGB(80, 80, 80);
     constexpr COLORREF TEXT_PRIMARY = RGB(255, 255, 255);
     constexpr COLORREF TEXT_SECONDARY = RGB(165, 165, 165);
+    constexpr COLORREF PENGUIN_WHITE = RGB(245, 245, 245);
+    constexpr COLORREF PENGUIN_ORANGE = RGB(235, 150, 45);
     constexpr COLORREF FLOATING_TRANSPARENT = RGB(255, 0, 255);
     constexpr COLORREF FLOATING_TEXT_SHADOW = RGB(0, 0, 0);
 
@@ -60,6 +62,48 @@ namespace
         SelectObject(hdc, oldPen);
         DeleteObject(brush);
         DeleteObject(pen);
+    }
+
+    void DrawPingoMascot(HDC hdc, int centerX, int centerY)
+    {
+        // Simple native vector mascot: Pingo, the project's official penguin.
+        HBRUSH black = CreateSolidBrush(RGB(5, 5, 5));
+        HBRUSH white = CreateSolidBrush(PENGUIN_WHITE);
+        HBRUSH orange = CreateSolidBrush(PENGUIN_ORANGE);
+
+        HBRUSH oldBrush = static_cast<HBRUSH>(SelectObject(hdc, black));
+        HPEN oldPen = static_cast<HPEN>(SelectObject(hdc, static_cast<HPEN>(GetStockObject(NULL_PEN))));
+
+        Ellipse(hdc, centerX - 44, centerY - 55, centerX + 44, centerY + 55);
+
+        SelectObject(hdc, white);
+        Ellipse(hdc, centerX - 31, centerY - 4, centerX + 31, centerY + 49);
+
+        SelectObject(hdc, black);
+        Ellipse(hdc, centerX - 24, centerY - 39, centerX - 3, centerY - 18);
+        Ellipse(hdc, centerX + 3, centerY - 39, centerX + 24, centerY - 18);
+
+        SelectObject(hdc, white);
+        Ellipse(hdc, centerX - 18, centerY - 34, centerX - 10, centerY - 26);
+        Ellipse(hdc, centerX + 10, centerY - 34, centerX + 18, centerY - 26);
+
+        SelectObject(hdc, orange);
+        POINT beak[] = {
+            {centerX - 9, centerY - 12},
+            {centerX + 9, centerY - 12},
+            {centerX, centerY - 2}
+        };
+        Polygon(hdc, beak, 3);
+
+        SelectObject(hdc, orange);
+        Ellipse(hdc, centerX - 31, centerY + 45, centerX - 5, centerY + 54);
+        Ellipse(hdc, centerX + 5, centerY + 45, centerX + 31, centerY + 54);
+
+        SelectObject(hdc, oldBrush);
+        SelectObject(hdc, oldPen);
+        DeleteObject(black);
+        DeleteObject(white);
+        DeleteObject(orange);
     }
 
     void DrawTextLine(
@@ -476,10 +520,12 @@ namespace
             FillRect(hdc, &client, background);
             DeleteObject(background);
 
+            DrawPingoMascot(hdc, 82, 82);
+
             DrawTextLine(
                 hdc,
                 L"Pingo App",
-                RECT{32, 28, client.right - 32, 72},
+                RECT{145, 34, client.right - 32, 78},
                 30,
                 FW_SEMIBOLD,
                 TEXT_PRIMARY,
@@ -488,8 +534,8 @@ namespace
 
             DrawTextLine(
                 hdc,
-                L"Adicione aplicativos e deixe seus icones flutuando pela tela.",
-                RECT{34, 76, client.right - 32, 108},
+                L"Seu pinguim para organizar aplicativos na tela.",
+                RECT{147, 78, client.right - 32, 108},
                 16,
                 FW_NORMAL,
                 TEXT_SECONDARY,
