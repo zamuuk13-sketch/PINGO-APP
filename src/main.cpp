@@ -7,6 +7,7 @@
 #include <string>
 #include <fstream>
 #include <cwchar>
+#include <algorithm>
 
 namespace
 {
@@ -49,6 +50,15 @@ namespace
     PingoAppItem* g_currentItem = nullptr;
 
     HINSTANCE g_instance = nullptr;
+
+    bool IsExeFile(const wchar_t* path);
+    PingoAppItem* CreatePingoAppItem(
+        HWND owner,
+        HINSTANCE hInstance,
+        const std::wstring& path);
+    void ApplyFloatingLayout(PingoAppItem* item);
+    void DestroyAppItem(PingoAppItem*& item);
+
 
     std::wstring GetSettingsDirectory()
     {
@@ -280,7 +290,7 @@ namespace
         if (settingsPath.empty())
             return false;
 
-        std::ifstream file(settingsPath, std::ios::binary);
+        std::ifstream file(settingsPath.c_str(), std::ios::binary);
         if (!file)
             return false;
 
@@ -293,8 +303,13 @@ namespace
 
         ReadJsonString(json, "path", item.path);
         ReadJsonString(json, "name", item.name);
-        ReadJsonInt(json, "x", item.position.x);
-        ReadJsonInt(json, "y", item.position.y);
+
+        int savedX = item.position.x;
+        int savedY = item.position.y;
+        ReadJsonInt(json, "x", savedX);
+        ReadJsonInt(json, "y", savedY);
+        item.position.x = static_cast<LONG>(savedX);
+        item.position.y = static_cast<LONG>(savedY);
         ReadJsonInt(json, "size", item.size);
         ReadJsonBool(json, "fixedPosition", item.fixedPosition);
         ReadJsonBool(json, "alwaysOnTop", item.alwaysOnTop);
@@ -313,7 +328,7 @@ namespace
             (attributes & FILE_ATTRIBUTE_DIRECTORY))
             return false;
 
-        savedItem.size = max(32, min(128, savedItem.size));
+        savedItem.size = std::max(32, std::min(128, savedItem.size));
 
         g_currentItem = CreatePingoAppItem(owner, hInstance, savedItem.path);
         if (!g_currentItem)
@@ -513,7 +528,7 @@ namespace
 
         if (versionSize > 0)
         {
-            std::wstring buffer(versionSize, L'\\0');
+            std::wstring buffer(versionSize, L'\0');
 
             if (GetFileVersionInfoW(path.c_str(), 0, versionSize, buffer.data()))
             {
@@ -595,12 +610,12 @@ namespace
 
     int GetFloatingWidth(const PingoAppItem* item)
     {
-        return max(FLOATING_ICON_WIDTH, item ? item->size + 24 : FLOATING_ICON_WIDTH);
+        return std::max(FLOATING_ICON_WIDTH, item ? item->size + 24 : FLOATING_ICON_WIDTH);
     }
 
     int GetFloatingHeight(const PingoAppItem* item)
     {
-        return max(FLOATING_ICON_HEIGHT, item ? item->size + 46 : FLOATING_ICON_HEIGHT);
+        return std::max(FLOATING_ICON_HEIGHT, item ? item->size + 46 : FLOATING_ICON_HEIGHT);
     }
 
     bool EnsurePositionOnAvailableMonitor(PingoAppItem* item)
@@ -1002,7 +1017,7 @@ namespace
         HWND dialog = CreateWindowExW(
             WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
             RENAME_CLASS,
-            L\"Renomear aplicativo — Pingo App\",
+            L"Renomear aplicativo — Pingo App",
             WS_CAPTION | WS_SYSMENU,
             x,
             y,
@@ -1622,7 +1637,7 @@ namespace
 
     void HandleDroppedPath(HWND hwnd, HINSTANCE hInstance, const std::wstring& path)
     {
-        if (!IsExeFile(path))
+        if (!IsExeFile(path.c_str()))
             return;
 
         DestroyAppItem(g_currentItem);
