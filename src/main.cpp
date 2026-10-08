@@ -28,6 +28,7 @@ namespace
     constexpr int WINDOW_HEIGHT = 500;
     constexpr int FLOATING_ICON_WIDTH = 96;
     constexpr int FLOATING_ICON_HEIGHT = 118;
+    constexpr UINT WM_PINGO_REMOVE_ITEM = WM_APP + 1;
 
     struct PingoAppItem
     {
@@ -723,7 +724,14 @@ namespace
             break;
 
         case PingoMenuCommand::Remove:
-            DestroyAppItem(g_currentItem);
+            if (MessageBoxW(
+                    hwnd,
+                    L"Remover este aplicativo do Pingo?\\n\\nO arquivo original não será apagado.",
+                    L"Remover do Pingo App",
+                    MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES)
+            {
+                PostMessageW(hwnd, WM_PINGO_REMOVE_ITEM, 0, 0);
+            }
             break;
 
         case PingoMenuCommand::Rename:
@@ -806,6 +814,10 @@ namespace
                     // will be handled by the future context menu/error UI.
                 }
             }
+            return 0;
+
+        case WM_PINGO_REMOVE_ITEM:
+            DestroyAppItem(g_currentItem);
             return 0;
 
         case WM_EXITSIZEMOVE:
