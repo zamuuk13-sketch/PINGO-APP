@@ -15,4 +15,7 @@ target_link_libraries(PingoApp PRIVATE Version Shell32 Ole32)
 
 if (MSVC)
     target_compile_options(PingoApp PRIVATE /W4)
+elseif (MINGW)
+    # MinGW precisa usar o startup Unicode para a entrada wWinMain.
+    target_link_options(PingoApp PRIVATE -municode)
 endif()
