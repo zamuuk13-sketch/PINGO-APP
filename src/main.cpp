@@ -407,6 +407,18 @@ namespace
             }
             return 0;
 
+        case WM_EXITSIZEMOVE:
+            if (item)
+            {
+                RECT windowRect{};
+                if (GetWindowRect(hwnd, &windowRect))
+                {
+                    item->position.x = windowRect.left;
+                    item->position.y = windowRect.top;
+                }
+            }
+            return 0;
+
         case WM_DESTROY:
             if (item)
                 item->floatingWindow = nullptr;
