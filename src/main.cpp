@@ -7,9 +7,13 @@ namespace
 
     constexpr COLORREF BACKGROUND = RGB(13, 13, 13);
     constexpr COLORREF SURFACE = RGB(22, 22, 22);
+    constexpr COLORREF SURFACE_HOVER = RGB(28, 28, 28);
     constexpr COLORREF BORDER = RGB(48, 48, 48);
     constexpr COLORREF TEXT_PRIMARY = RGB(255, 255, 255);
     constexpr COLORREF TEXT_SECONDARY = RGB(165, 165, 165);
+
+    constexpr int WINDOW_WIDTH = 800;
+    constexpr int WINDOW_HEIGHT = 500;
 
     HFONT CreatePingoFont(int size, int weight)
     {
@@ -21,10 +25,61 @@ namespace
         );
     }
 
+    void DrawRoundedPanel(HDC hdc, const RECT& rect, COLORREF fill, COLORREF border)
+    {
+        HPEN pen = CreatePen(PS_SOLID, 1, border);
+        HBRUSH brush = CreateSolidBrush(fill);
+
+        HPEN oldPen = static_cast<HPEN>(SelectObject(hdc, pen));
+        HBRUSH oldBrush = static_cast<HBRUSH>(SelectObject(hdc, brush));
+
+        RoundRect(
+            hdc,
+            rect.left, rect.top,
+            rect.right, rect.bottom,
+            18, 18
+        );
+
+        SelectObject(hdc, oldBrush);
+        SelectObject(hdc, oldPen);
+        DeleteObject(brush);
+        DeleteObject(pen);
+    }
+
+    void DrawTextLine(
+        HDC hdc,
+        const wchar_t* text,
+        const RECT& rect,
+        int fontSize,
+        int fontWeight,
+        COLORREF color,
+        UINT format)
+    {
+        HFONT font = CreatePingoFont(fontSize, fontWeight);
+        HFONT oldFont = static_cast<HFONT>(SelectObject(hdc, font));
+
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, color);
+        DrawTextW(hdc, text, -1, const_cast<RECT*>(&rect), format);
+
+        SelectObject(hdc, oldFont);
+        DeleteObject(font);
+    }
+
     LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         switch (message)
         {
+        case WM_ERASEBKGND:
+            return 1;
+
+        case WM_SIZE:
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+
+        case WM_MOUSEMOVE:
+            return 0;
+
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;
@@ -43,73 +98,49 @@ namespace
 
             SetBkMode(hdc, TRANSPARENT);
 
-            HFONT titleFont = CreatePingoFont(30, FW_SEMIBOLD);
-            HFONT oldFont = static_cast<HFONT>(SelectObject(hdc, titleFont));
-            SetTextColor(hdc, TEXT_PRIMARY);
-
-            RECT titleRect{32, 28, client.right - 32, 72};
-            DrawTextW(hdc, L"Pingo App", -1, &titleRect,
-                      DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-
-            SelectObject(hdc, oldFont);
-            DeleteObject(titleFont);
-
-            HFONT subtitleFont = CreatePingoFont(16, FW_NORMAL);
-            oldFont = static_cast<HFONT>(SelectObject(hdc, subtitleFont));
-            SetTextColor(hdc, TEXT_SECONDARY);
-
-            RECT subtitleRect{34, 76, client.right - 32, 108};
-            DrawTextW(
+            DrawTextLine(
                 hdc,
-                L"Adicione aplicativos e deixe seus icones flutuando pela tela.",
-                -1,
-                &subtitleRect,
+                L"Pingo App",
+                RECT{32, 28, client.right - 32, 72},
+                30,
+                FW_SEMIBOLD,
+                TEXT_PRIMARY,
                 DT_LEFT | DT_SINGLELINE | DT_VCENTER
             );
 
-            SelectObject(hdc, oldFont);
-            DeleteObject(subtitleFont);
-
-            RECT dropRect{32, 135, client.right - 32, client.bottom - 32};
-
-            HPEN borderPen = CreatePen(PS_SOLID, 1, BORDER);
-            HBRUSH dropBrush = CreateSolidBrush(SURFACE);
-            HPEN oldPen = static_cast<HPEN>(SelectObject(hdc, borderPen));
-            HBRUSH oldBrush = static_cast<HBRUSH>(SelectObject(hdc, dropBrush));
-
-            RoundRect(
+            DrawTextLine(
                 hdc,
-                dropRect.left, dropRect.top,
-                dropRect.right, dropRect.bottom,
-                18, 18
+                L"Adicione aplicativos e deixe seus icones flutuando pela tela.",
+                RECT{34, 76, client.right - 32, 108},
+                16,
+                FW_NORMAL,
+                TEXT_SECONDARY,
+                DT_LEFT | DT_SINGLELINE | DT_VCENTER
             );
 
-            SelectObject(hdc, oldBrush);
-            SelectObject(hdc, oldPen);
-            DeleteObject(dropBrush);
-            DeleteObject(borderPen);
-
-            HFONT dropFont = CreatePingoFont(18, FW_MEDIUM);
-            oldFont = static_cast<HFONT>(SelectObject(hdc, dropFont));
-            SetTextColor(hdc, TEXT_PRIMARY);
-
-            RECT dropTextRect{
-                dropRect.left + 20,
-                (dropRect.top + dropRect.bottom) / 2 - 18,
-                dropRect.right - 20,
-                (dropRect.top + dropRect.bottom) / 2 + 18
+            RECT dropRect{
+                32,
+                135,
+                client.right - 32,
+                client.bottom - 32
             };
 
-            DrawTextW(
+            DrawRoundedPanel(hdc, dropRect, SURFACE, BORDER);
+
+            DrawTextLine(
                 hdc,
                 L"Solte um arquivo .exe aqui",
-                -1,
-                &dropTextRect,
+                RECT{
+                    dropRect.left + 20,
+                    (dropRect.top + dropRect.bottom) / 2 - 18,
+                    dropRect.right - 20,
+                    (dropRect.top + dropRect.bottom) / 2 + 18
+                },
+                18,
+                FW_MEDIUM,
+                TEXT_PRIMARY,
                 DT_CENTER | DT_SINGLELINE | DT_VCENTER
             );
-
-            SelectObject(hdc, oldFont);
-            DeleteObject(dropFont);
 
             EndPaint(hwnd, &ps);
             return 0;
@@ -129,6 +160,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
     wc.lpszClassName = WINDOW_CLASS;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+    wc.style = CS_HREDRAW | CS_VREDRAW;
 
     if (!RegisterClassW(&wc))
         return 0;
@@ -139,7 +171,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
         WINDOW_TITLE,
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT,
-        800, 500,
+        WINDOW_WIDTH, WINDOW_HEIGHT,
         nullptr, nullptr, hInstance, nullptr
     );
 
