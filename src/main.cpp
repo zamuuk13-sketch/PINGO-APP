@@ -15,11 +15,13 @@ namespace
     constexpr COLORREF BORDER_ACTIVE = RGB(80, 80, 80);
     constexpr COLORREF TEXT_PRIMARY = RGB(255, 255, 255);
     constexpr COLORREF TEXT_SECONDARY = RGB(165, 165, 165);
+    constexpr COLORREF FLOATING_TRANSPARENT = RGB(255, 0, 255);
+    constexpr COLORREF FLOATING_TEXT_SHADOW = RGB(0, 0, 0);
 
     constexpr int WINDOW_WIDTH = 800;
     constexpr int WINDOW_HEIGHT = 500;
     constexpr int FLOATING_ICON_WIDTH = 96;
-    constexpr int FLOATING_ICON_HEIGHT = 112;
+    constexpr int FLOATING_ICON_HEIGHT = 118;
 
     struct PingoAppItem
     {
@@ -192,15 +194,15 @@ namespace
         RECT client{};
         GetClientRect(WindowFromDC(hdc), &client);
 
-        HBRUSH background = CreateSolidBrush(RGB(0, 0, 0));
-        FillRect(hdc, &client, background);
-        DeleteObject(background);
+        HBRUSH transparent = CreateSolidBrush(FLOATING_TRANSPARENT);
+        FillRect(hdc, &client, transparent);
+        DeleteObject(transparent);
 
         if (item->icon)
         {
             const int iconSize = item->size;
             const int x = (FLOATING_ICON_WIDTH - iconSize) / 2;
-            const int y = 4;
+            const int y = 2;
 
             DrawIconEx(
                 hdc,
@@ -217,10 +219,23 @@ namespace
 
         RECT textRect{
             4,
-            item->size + 7,
+            item->size + 8,
             FLOATING_ICON_WIDTH - 4,
-            FLOATING_ICON_HEIGHT - 2
+            FLOATING_ICON_HEIGHT - 1
         };
+
+        RECT shadowRect = textRect;
+        OffsetRect(&shadowRect, 1, 1);
+
+        DrawTextLine(
+            hdc,
+            item->name.c_str(),
+            shadowRect,
+            13,
+            FW_NORMAL,
+            FLOATING_TEXT_SHADOW,
+            DT_CENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_VCENTER
+        );
 
         DrawTextLine(
             hdc,
@@ -312,7 +327,7 @@ namespace
             return false;
 
         HWND floating = CreateWindowExW(
-            WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
+            WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_LAYERED,
             FLOATING_CLASS,
             item->name.c_str(),
             WS_POPUP,
@@ -330,6 +345,13 @@ namespace
             return false;
 
         item->floatingWindow = floating;
+
+        SetLayeredWindowAttributes(
+            floating,
+            FLOATING_TRANSPARENT,
+            0,
+            LWA_COLORKEY
+        );
 
         ShowWindow(floating, SW_SHOWNOACTIVATE);
         UpdateWindow(floating);
@@ -487,7 +509,7 @@ namespace
                 hdc,
                 g_isDragOver
                     ? L"Solte o arquivo .exe aqui"
-                    : L"Arraste um arquivo .exe para ca",
+                    : L"Arraste um arquivo .exe para cá",
                 RECT{
                     dropRect.left + 20,
                     (dropRect.top + dropRect.bottom) / 2 - 18,
