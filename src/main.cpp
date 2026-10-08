@@ -655,6 +655,7 @@ namespace
         LocateFile,
         RunAsAdministrator,
         Remove,
+        ToggleAlwaysOnTop,
         Configure
     };
 
@@ -1234,6 +1235,12 @@ namespace
         AppendMenuW(menu, MF_STRING, static_cast<UINT>(PingoMenuCommand::RunAsAdministrator), L"Executar como administrador");
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING, static_cast<UINT>(PingoMenuCommand::Configure), L"Configurar");
+        AppendMenuW(
+            menu,
+            MF_STRING | (item->alwaysOnTop ? MF_CHECKED : MF_UNCHECKED),
+            static_cast<UINT>(PingoMenuCommand::ToggleAlwaysOnTop),
+            L"Sempre sobre outras janelas"
+        );
         AppendMenuW(menu, MF_STRING, static_cast<UINT>(PingoMenuCommand::Remove), L"Remover");
 
         SetForegroundWindow(hwnd);
@@ -1276,6 +1283,20 @@ namespace
 
         case PingoMenuCommand::Rename:
             RenamePingoItem(hwnd, item);
+            break;
+
+        case PingoMenuCommand::ToggleAlwaysOnTop:
+            item->alwaysOnTop = !item->alwaysOnTop;
+            SetWindowPos(
+                hwnd,
+                item->alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+                item->position.x,
+                item->position.y,
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW
+            );
+            SaveSettings(item);
             break;
 
         case PingoMenuCommand::Configure:
