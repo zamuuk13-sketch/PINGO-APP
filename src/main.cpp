@@ -656,7 +656,7 @@ namespace
         RunAsAdministrator,
         Remove,
         ToggleAlwaysOnTop,
-        NormalMode,
+        ToggleNoOverlap,
         ToggleFixedPosition,
         Configure
     };
@@ -1246,8 +1246,8 @@ namespace
         AppendMenuW(
             menu,
             MF_STRING | (!item->alwaysOnTop ? MF_CHECKED : MF_UNCHECKED),
-            static_cast<UINT>(PingoMenuCommand::NormalMode),
-            L"Modo normal"
+            static_cast<UINT>(PingoMenuCommand::ToggleNoOverlap),
+            L"Não sobrepor outros aplicativos"
         );
         AppendMenuW(
             menu,
@@ -1304,20 +1304,6 @@ namespace
             SetWindowPos(
                 hwnd,
                 item->alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
-                item->position.x,
-                item->position.y,
-                0,
-                0,
-                SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW
-            );
-            SaveSettings(item);
-            break;
-
-        case PingoMenuCommand::NormalMode:
-            item->alwaysOnTop = false;
-            SetWindowPos(
-                hwnd,
-                HWND_NOTOPMOST,
                 item->position.x,
                 item->position.y,
                 0,
