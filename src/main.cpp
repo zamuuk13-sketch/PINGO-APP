@@ -1638,10 +1638,49 @@ namespace
     void HandleDroppedPath(HWND hwnd, HINSTANCE hInstance, const std::wstring& path)
     {
         if (!IsExeFile(path.c_str()))
+        {
+            MessageBoxW(
+                hwnd,
+                L"O Pingo precisa receber um arquivo .exe.\n\nArraste o executável do aplicativo para a área indicada.",
+                L"Pingo App",
+                MB_OK | MB_ICONINFORMATION
+            );
             return;
+        }
+
+        PingoAppItem* newItem = CreatePingoAppItem(hwnd, hInstance, path);
+        if (!newItem)
+        {
+            MessageBoxW(
+                hwnd,
+                L"Não foi possível criar o ícone flutuante deste aplicativo.",
+                L"Pingo App",
+                MB_OK | MB_ICONERROR
+            );
+            return;
+        }
 
         DestroyAppItem(g_currentItem);
-        g_currentItem = CreatePingoAppItem(hwnd, hInstance, path);
+        g_currentItem = newItem;
+
+        ApplyFloatingLayout(g_currentItem);
+        ShowWindow(g_currentItem->floatingWindow, SW_SHOWNOACTIVATE);
+        SetWindowPos(
+            g_currentItem->floatingWindow,
+            g_currentItem->alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+            g_currentItem->position.x,
+            g_currentItem->position.y,
+            GetFloatingWidth(g_currentItem),
+            GetFloatingHeight(g_currentItem),
+            SWP_NOACTIVATE | SWP_SHOWWINDOW
+        );
+        RedrawWindow(
+            g_currentItem->floatingWindow,
+            nullptr,
+            nullptr,
+            RDW_INVALIDATE | RDW_UPDATENOW | RDW_ERASE
+        );
+
         SaveCurrentSettings();
         InvalidateRect(hwnd, nullptr, FALSE);
     }
