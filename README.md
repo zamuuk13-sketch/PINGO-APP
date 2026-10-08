@@ -34,7 +34,9 @@ O projeto será desenvolvido em **C++**, utilizando recursos nativos do Windows 
 
 As etapas 1–18 já foram implementadas. O sistema de **configurações persistentes** restaura automaticamente o estado salvo do ícone ao abrir o Pingo, e a remoção do aplicativo apaga o arquivo de configuração correspondente.
 
-A **Etapa 17** adicionou o painel **Configurar**, acessível pelo botão direito, com tamanho, posição fixa e modo de sobreposição. A **Etapa 18** consolidou os dois modos de janela: **Sempre sobre outras janelas** e **Modo normal**. A troca é aplicada imediatamente, sem precisar reiniciar o Pingo, e continua salva no `settings.json`.
+A **Etapa 17** adicionou o painel **Configurar**, acessível pelo botão direito, com tamanho, posição fixa e as opções de comportamento do ícone.
+
+A **Etapa 18** implementou o modo **Sempre sobre outras janelas** como uma ação direta no menu do ícone. A opção aparece com marcação quando está ativa, pode ser ligada/desligada instantaneamente e a preferência continua salva no `settings.json`.
 
 ## 🎯 Objetivo
 
