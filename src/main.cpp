@@ -302,6 +302,37 @@ namespace
         return !item.path.empty() && IsExeFile(item.path.c_str());
     }
 
+    bool RestoreSavedItem(HWND owner, HINSTANCE hInstance)
+    {
+        PingoAppItem savedItem{};
+        if (!LoadSettings(savedItem))
+            return false;
+
+        const DWORD attributes = GetFileAttributesW(savedItem.path.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES ||
+            (attributes & FILE_ATTRIBUTE_DIRECTORY))
+            return false;
+
+        savedItem.size = max(32, min(128, savedItem.size));
+
+        g_currentItem = CreatePingoAppItem(owner, hInstance, savedItem.path);
+        if (!g_currentItem)
+            return false;
+
+        g_currentItem->name = savedItem.name.empty()
+            ? g_currentItem->name
+            : savedItem.name;
+        g_currentItem->position = savedItem.position;
+        g_currentItem->size = savedItem.size;
+        g_currentItem->fixedPosition = savedItem.fixedPosition;
+        g_currentItem->alwaysOnTop = savedItem.alwaysOnTop;
+
+        ApplyFloatingLayout(g_currentItem);
+        SaveSettings(g_currentItem);
+        InvalidateRect(g_currentItem->floatingWindow, nullptr, FALSE);
+        return true;
+    }
+
     void SaveCurrentSettings()
     {
         SaveSettings(g_currentItem);
@@ -1910,30 +1941,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
         DragAcceptFiles(hwnd, TRUE);
     }
 
-    PingoAppItem savedItem{};
-    if (LoadSettings(savedItem))
-    {
-        const DWORD attributes = GetFileAttributesW(savedItem.path.c_str());
-        if (attributes != INVALID_FILE_ATTRIBUTES &&
-            !(attributes & FILE_ATTRIBUTE_DIRECTORY))
-        {
-            g_currentItem = CreatePingoAppItem(hwnd, hInstance, savedItem.path);
-            if (g_currentItem)
-            {
-                g_currentItem->name = savedItem.name.empty()
-                    ? g_currentItem->name
-                    : savedItem.name;
-                g_currentItem->position = savedItem.position;
-                g_currentItem->size = savedItem.size;
-                g_currentItem->fixedPosition = savedItem.fixedPosition;
-                g_currentItem->alwaysOnTop = savedItem.alwaysOnTop;
-
-                ApplyFloatingLayout(g_currentItem);
-
-                InvalidateRect(g_currentItem->floatingWindow, nullptr, FALSE);
-            }
-        }
-    }
+    RestoreSavedItem(hwnd, hInstance);
 
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
