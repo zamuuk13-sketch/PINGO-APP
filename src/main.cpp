@@ -1,4 +1,6 @@
 #include <windows.h>
+#include <ole2.h>
+#include <oleidl.h>
 #include <shellapi.h>
 #include <string>
 
@@ -36,8 +38,10 @@ namespace
     };
 
     bool g_isDragOver = false;
-    bool g_trackingDrag = false;
+    bool g_oleDropRegistered = false;
     PingoAppItem* g_currentItem = nullptr;
+    HWND g_mainWindow = nullptr;
+    HINSTANCE g_instance = nullptr;
 
     HFONT CreatePingoFont(int size, int weight)
     {
@@ -134,19 +138,6 @@ namespace
 
         g_isDragOver = active;
         InvalidateRect(hwnd, nullptr, FALSE);
-    }
-
-    bool IsCursorInsideClient(HWND hwnd)
-    {
-        POINT point{};
-        if (!GetCursorPos(&point))
-            return false;
-
-        ScreenToClient(hwnd, &point);
-
-        RECT client{};
-        GetClientRect(hwnd, &client);
-        return PtInRect(&client, point) != FALSE;
     }
 
     void DrawDropHint(HDC hdc, const RECT& dropRect, bool active)
@@ -528,42 +519,219 @@ namespace
         return item;
     }
 
+    void HandleDroppedPath(HWND hwnd, HINSTANCE hInstance, const std::wstring& path)
+    {
+        if (!IsExeFile(path))
+            return;
+
+        DestroyAppItem(g_currentItem);
+        g_currentItem = CreatePingoAppItem(hwnd, hInstance, path);
+        InvalidateRect(hwnd, nullptr, FALSE);
+    }
+
     void HandleDroppedFile(HWND hwnd, HDROP drop, HINSTANCE hInstance)
     {
         const UINT fileCount = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
 
         for (UINT i = 0; i < fileCount; ++i)
         {
-            wchar_t path[MAX_PATH]{};
-
-            if (DragQueryFileW(drop, i, path, MAX_PATH) == 0)
+            const UINT required = DragQueryFileW(drop, i, nullptr, 0);
+            if (required == 0)
                 continue;
 
-            if (!IsExeFile(path))
+            std::wstring path(required + 1, L'\0');
+            if (DragQueryFileW(drop, i, path.data(), required + 1) == 0)
                 continue;
 
-            DestroyAppItem(g_currentItem);
-            g_currentItem = CreatePingoAppItem(hwnd, hInstance, path);
+            path.resize(required);
+            HandleDroppedPath(hwnd, hInstance, path);
 
             if (g_currentItem)
-            {
-                std::wstring message =
-                    L"Icone flutuante criado para:\n" +
-                    g_currentItem->name;
-
-                MessageBoxW(
-                    hwnd,
-                    message.c_str(),
-                    L"Pingo App",
-                    MB_OK | MB_ICONINFORMATION
-                );
-            }
-
-            break;
+                break;
         }
 
         DragFinish(drop);
     }
+
+    class PingoDropTarget final : public IDropTarget
+    {
+    public:
+        PingoDropTarget(HWND hwnd, HINSTANCE hInstance)
+            : hwnd_(hwnd), hInstance_(hInstance)
+        {
+        }
+
+        HRESULT STDMETHODCALLTYPE QueryInterface(
+            REFIID riid,
+            void** ppvObject) override
+        {
+            if (!ppvObject)
+                return E_POINTER;
+
+            *ppvObject = nullptr;
+
+            if (riid == IID_IUnknown || riid == IID_IDropTarget)
+            {
+                *ppvObject = static_cast<IDropTarget*>(this);
+                AddRef();
+                return S_OK;
+            }
+
+            return E_NOINTERFACE;
+        }
+
+        ULONG STDMETHODCALLTYPE AddRef() override
+        {
+            return ++referenceCount_;
+        }
+
+        ULONG STDMETHODCALLTYPE Release() override
+        {
+            const ULONG count = --referenceCount_;
+            if (count == 0)
+                delete this;
+            return count;
+        }
+
+        HRESULT STDMETHODCALLTYPE DragEnter(
+            IDataObject* dataObject,
+            DWORD,
+            POINTL,
+            DWORD* effect) override
+        {
+            const bool accepts = HasExeFile(dataObject);
+            SetDropVisual(hwnd_, accepts);
+
+            if (effect)
+                *effect = accepts ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE DragOver(
+            DWORD,
+            POINTL,
+            DWORD* effect) override
+        {
+            if (effect)
+                *effect = g_isDragOver ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE DragLeave() override
+        {
+            SetDropVisual(hwnd_, false);
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE Drop(
+            IDataObject* dataObject,
+            DWORD,
+            POINTL,
+            DWORD* effect) override
+        {
+            bool handled = false;
+
+            FORMATETC format{};
+            format.cfFormat = CF_HDROP;
+            format.ptd = nullptr;
+            format.dwAspect = DVASPECT_CONTENT;
+            format.lindex = -1;
+            format.tymed = TYMED_HGLOBAL;
+
+            STGMEDIUM medium{};
+            if (SUCCEEDED(dataObject->GetData(&format, &medium)))
+            {
+                HDROP drop = static_cast<HDROP>(GlobalLock(medium.hGlobal));
+
+                if (drop)
+                {
+                    const UINT fileCount = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+
+                    for (UINT i = 0; i < fileCount; ++i)
+                    {
+                        const UINT required = DragQueryFileW(drop, i, nullptr, 0);
+                        if (required == 0)
+                            continue;
+
+                        std::wstring path(required + 1, L'\0');
+                        if (DragQueryFileW(drop, i, path.data(), required + 1) != 0)
+                        {
+                            path.resize(required);
+
+                            if (IsExeFile(path.c_str()))
+                            {
+                                HandleDroppedPath(hwnd_, hInstance_, path);
+                                handled = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    GlobalUnlock(medium.hGlobal);
+                }
+
+                ReleaseStgMedium(&medium);
+            }
+
+            SetDropVisual(hwnd_, false);
+
+            if (effect)
+                *effect = handled ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+
+            return handled ? S_OK : S_FALSE;
+        }
+
+    private:
+        static bool HasExeFile(IDataObject* dataObject)
+        {
+            if (!dataObject)
+                return false;
+
+            FORMATETC format{};
+            format.cfFormat = CF_HDROP;
+            format.ptd = nullptr;
+            format.dwAspect = DVASPECT_CONTENT;
+            format.lindex = -1;
+            format.tymed = TYMED_HGLOBAL;
+
+            STGMEDIUM medium{};
+            if (FAILED(dataObject->GetData(&format, &medium)))
+                return false;
+
+            bool hasExe = false;
+            HDROP drop = static_cast<HDROP>(GlobalLock(medium.hGlobal));
+
+            if (drop)
+            {
+                const UINT fileCount = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+
+                for (UINT i = 0; i < fileCount && !hasExe; ++i)
+                {
+                    const UINT required = DragQueryFileW(drop, i, nullptr, 0);
+                    if (required == 0)
+                        continue;
+
+                    std::wstring path(required + 1, L'\0');
+                    if (DragQueryFileW(drop, i, path.data(), required + 1) != 0)
+                    {
+                        path.resize(required);
+                        hasExe = IsExeFile(path.c_str());
+                    }
+                }
+
+                GlobalUnlock(medium.hGlobal);
+            }
+
+            ReleaseStgMedium(&medium);
+            return hasExe;
+        }
+
+        ULONG referenceCount_ = 1;
+        HWND hwnd_ = nullptr;
+        HINSTANCE hInstance_ = nullptr;
+    };
 
     LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
@@ -576,37 +744,12 @@ namespace
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
 
-        case WM_MOUSEMOVE:
-            if (!g_trackingDrag)
-            {
-                TRACKMOUSEEVENT track{};
-                track.cbSize = sizeof(track);
-                track.dwFlags = TME_LEAVE;
-                track.hwndTrack = hwnd;
-                TrackMouseEvent(&track);
-                g_trackingDrag = true;
-            }
-
-            if (g_isDragOver)
-                SetDropVisual(hwnd, true);
-
-            return 0;
-
-        case WM_MOUSELEAVE:
-            g_trackingDrag = false;
-            if (!g_isDragOver)
-                SetDropVisual(hwnd, false);
-            return 0;
-
         case WM_DROPFILES:
-            g_trackingDrag = false;
-            g_isDragOver = false;
-            InvalidateRect(hwnd, nullptr, FALSE);
-            HandleDroppedFile(
-                hwnd,
-                reinterpret_cast<HDROP>(wParam),
-                reinterpret_cast<HINSTANCE>(GetWindowLongPtrW(hwnd, GWLP_HINSTANCE))
-            );
+            if (!g_oleDropRegistered)
+            {
+                SetDropVisual(hwnd, false);
+                HandleDroppedFile(hwnd, reinterpret_cast<HDROP>(wParam), g_instance);
+            }
             return 0;
 
         case WM_DESTROY:
@@ -671,6 +814,12 @@ namespace
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
 {
+    g_instance = hInstance;
+
+    const HRESULT oleResult = OleInitialize(nullptr);
+    if (FAILED(oleResult))
+        return 0;
+
     WNDCLASSW wc{};
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
@@ -683,7 +832,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
         return 0;
 
     HWND hwnd = CreateWindowExW(
-        WS_EX_ACCEPTFILES,
+        0,
         WINDOW_CLASS,
         WINDOW_TITLE,
         WS_OVERLAPPEDWINDOW,
@@ -693,10 +842,26 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
     );
 
     if (!hwnd)
+    {
+        OleUninitialize();
         return 0;
+    }
 
-    SetWindowLongPtrW(hwnd, GWLP_HINSTANCE, reinterpret_cast<LONG_PTR>(hInstance));
-    DragAcceptFiles(hwnd, TRUE);
+    g_mainWindow = hwnd;
+
+    auto* dropTarget = new PingoDropTarget(hwnd, hInstance);
+    if (SUCCEEDED(RegisterDragDrop(hwnd, dropTarget)))
+    {
+        g_oleDropRegistered = true;
+        dropTarget->Release();
+    }
+    else
+    {
+        dropTarget->Release();
+        SetWindowLongPtrW(hwnd, GWLP_EXSTYLE,
+            GetWindowLongPtrW(hwnd, GWLP_EXSTYLE) | WS_EX_ACCEPTFILES);
+        DragAcceptFiles(hwnd, TRUE);
+    }
 
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
@@ -707,6 +872,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+
+    if (g_oleDropRegistered)
+        RevokeDragDrop(hwnd);
+
+    g_oleDropRegistered = false;
+    g_mainWindow = nullptr;
+    OleUninitialize();
 
     return static_cast<int>(msg.wParam);
 }
