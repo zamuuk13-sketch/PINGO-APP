@@ -390,7 +390,31 @@ namespace
         if (!item || item->path.empty())
             return;
 
-        ShellExecuteW(hwnd, L"runas", item->path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        SetLastError(ERROR_SUCCESS);
+
+        HINSTANCE result = ShellExecuteW(
+            hwnd,
+            L"runas",
+            item->path.c_str(),
+            nullptr,
+            nullptr,
+            SW_SHOWNORMAL
+        );
+
+        if (reinterpret_cast<INT_PTR>(result) <= 32)
+        {
+            const DWORD error = GetLastError();
+
+            if (error != ERROR_CANCELLED)
+            {
+                MessageBoxW(
+                    hwnd,
+                    L"Não foi possível executar o aplicativo como administrador.",
+                    L"Pingo App",
+                    MB_OK | MB_ICONERROR
+                );
+            }
+        }
     }
 
 
