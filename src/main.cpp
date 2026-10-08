@@ -36,6 +36,7 @@ namespace
     };
 
     bool g_isDragOver = false;
+    bool g_trackingDrag = false;
     PingoAppItem* g_currentItem = nullptr;
 
     HFONT CreatePingoFont(int size, int weight)
@@ -124,6 +125,79 @@ namespace
 
         SelectObject(hdc, oldFont);
         DeleteObject(font);
+    }
+
+    void SetDropVisual(HWND hwnd, bool active)
+    {
+        if (g_isDragOver == active)
+            return;
+
+        g_isDragOver = active;
+        InvalidateRect(hwnd, nullptr, FALSE);
+    }
+
+    bool IsCursorInsideClient(HWND hwnd)
+    {
+        POINT point{};
+        if (!GetCursorPos(&point))
+            return false;
+
+        ScreenToClient(hwnd, &point);
+
+        RECT client{};
+        GetClientRect(hwnd, &client);
+        return PtInRect(&client, point) != FALSE;
+    }
+
+    void DrawDropHint(HDC hdc, const RECT& dropRect, bool active)
+    {
+        const int centerX = (dropRect.left + dropRect.right) / 2;
+        const int centerY = (dropRect.top + dropRect.bottom) / 2 - 18;
+
+        HBRUSH circle = CreateSolidBrush(active ? PENGUIN_ORANGE : RGB(35, 35, 35));
+        HPEN pen = CreatePen(PS_SOLID, 1, active ? PENGUIN_ORANGE : BORDER);
+
+        HBRUSH oldBrush = static_cast<HBRUSH>(SelectObject(hdc, circle));
+        HPEN oldPen = static_cast<HPEN>(SelectObject(hdc, pen));
+
+        Ellipse(hdc, centerX - 34, centerY - 34, centerX + 34, centerY + 34);
+
+        SelectObject(hdc, oldBrush);
+        SelectObject(hdc, oldPen);
+        DeleteObject(circle);
+        DeleteObject(pen);
+
+        DrawTextLine(
+            hdc,
+            active ? L"Solte aqui!" : L"Arraste um .exe para começar",
+            RECT{
+                dropRect.left + 30,
+                centerY + 48,
+                dropRect.right - 30,
+                centerY + 82
+            },
+            19,
+            FW_MEDIUM,
+            TEXT_PRIMARY,
+            DT_CENTER | DT_SINGLELINE | DT_VCENTER
+        );
+
+        DrawTextLine(
+            hdc,
+            active
+                ? L"O Pingo vai colocar o aplicativo na sua tela"
+                : L"O Pingo pega o nome e o ícone automaticamente",
+            RECT{
+                dropRect.left + 30,
+                centerY + 84,
+                dropRect.right - 30,
+                centerY + 116
+            },
+            14,
+            FW_NORMAL,
+            TEXT_SECONDARY,
+            DT_CENTER | DT_SINGLELINE | DT_VCENTER
+        );
     }
 
     bool IsExeFile(const wchar_t* path)
@@ -491,9 +565,29 @@ namespace
             return 0;
 
         case WM_MOUSEMOVE:
+            if (!g_trackingDrag)
+            {
+                TRACKMOUSEEVENT track{};
+                track.cbSize = sizeof(track);
+                track.dwFlags = TME_LEAVE;
+                track.hwndTrack = hwnd;
+                TrackMouseEvent(&track);
+                g_trackingDrag = true;
+            }
+
+            if (g_isDragOver)
+                SetDropVisual(hwnd, true);
+
+            return 0;
+
+        case WM_MOUSELEAVE:
+            g_trackingDrag = false;
+            if (!g_isDragOver)
+                SetDropVisual(hwnd, false);
             return 0;
 
         case WM_DROPFILES:
+            g_trackingDrag = false;
             g_isDragOver = false;
             InvalidateRect(hwnd, nullptr, FALSE);
             HandleDroppedFile(
@@ -547,26 +641,11 @@ namespace
             DrawRoundedPanel(
                 hdc,
                 dropRect,
-                g_isDragOver ? SURFACE_HOVER : SURFACE,
-                g_isDragOver ? BORDER_ACTIVE : BORDER
+                g_isDragOver ? RGB(30, 27, 20) : SURFACE,
+                g_isDragOver ? PENGUIN_ORANGE : BORDER
             );
 
-            DrawTextLine(
-                hdc,
-                g_isDragOver
-                    ? L"Solte o arquivo .exe aqui"
-                    : L"Arraste um arquivo .exe para cá",
-                RECT{
-                    dropRect.left + 20,
-                    (dropRect.top + dropRect.bottom) / 2 - 18,
-                    dropRect.right - 20,
-                    (dropRect.top + dropRect.bottom) / 2 + 18
-                },
-                18,
-                FW_MEDIUM,
-                TEXT_PRIMARY,
-                DT_CENTER | DT_SINGLELINE | DT_VCENTER
-            );
+            DrawDropHint(hdc, dropRect, g_isDragOver);
 
             EndPaint(hwnd, &ps);
             return 0;
