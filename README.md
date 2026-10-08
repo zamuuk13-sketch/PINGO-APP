@@ -30,9 +30,9 @@ O projeto será desenvolvido em **C++**, utilizando recursos nativos do Windows 
 
 ## 📍 Status
 
-**Etapa 21 — Em desenvolvimento** 🚧
+**Etapa 23 — Em desenvolvimento** 🚧
 
-As etapas 1–21 já foram implementadas. O sistema de **configurações persistentes** restaura automaticamente o estado salvo do ícone ao abrir o Pingo, e a remoção do aplicativo apaga o arquivo de configuração correspondente.
+As etapas 1–23 já foram implementadas. O sistema de **configurações persistentes** restaura automaticamente o estado salvo do ícone ao abrir o Pingo, e a remoção do aplicativo apaga o arquivo de configuração correspondente.
 
 A **Etapa 17** adicionou o painel **Configurar**, acessível pelo botão direito, com tamanho, posição fixa e as opções de comportamento do ícone.
 
@@ -48,3 +48,5 @@ Criar uma ferramenta pequena, rápida e prática para deixar os aplicativos favo
 
 
 A **Etapa 21** foi validada no código existente: as alterações do ícone são gravadas automaticamente em `%APPDATA%\\Pingo App\\settings.json`, incluindo nome, posição, tamanho, posição fixa e preferência de sobreposição. O arquivo temporário é substituído de forma atômica para reduzir o risco de corromper as configurações.
+
+A **Etapa 23** adicionou suporte básico a **múltiplos monitores**. O Pingo usa as áreas de trabalho dos monitores disponíveis para manter o ícone visível. Se um monitor for desconectado ou a configuração de telas mudar e a posição salva ficar fora de uma área disponível, o ícone é reposicionado automaticamente para uma área válida e a nova posição é salva.
