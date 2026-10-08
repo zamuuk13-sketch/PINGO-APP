@@ -657,6 +657,7 @@ namespace
         Remove,
         ToggleAlwaysOnTop,
         NormalMode,
+        ToggleFixedPosition,
         Configure
     };
 
@@ -1248,6 +1249,12 @@ namespace
             static_cast<UINT>(PingoMenuCommand::NormalMode),
             L"Modo normal"
         );
+        AppendMenuW(
+            menu,
+            MF_STRING | (item->fixedPosition ? MF_CHECKED : MF_UNCHECKED),
+            static_cast<UINT>(PingoMenuCommand::ToggleFixedPosition),
+            L"Posição fixa"
+        );
         AppendMenuW(menu, MF_STRING, static_cast<UINT>(PingoMenuCommand::Remove), L"Remover");
 
         SetForegroundWindow(hwnd);
@@ -1317,6 +1324,11 @@ namespace
                 0,
                 SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW
             );
+            SaveSettings(item);
+            break;
+
+        case PingoMenuCommand::ToggleFixedPosition:
+            item->fixedPosition = !item->fixedPosition;
             SaveSettings(item);
             break;
 
