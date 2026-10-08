@@ -1463,6 +1463,14 @@ namespace
             }
             return 0;
 
+        case WM_DISPLAYCHANGE:
+            if (item)
+            {
+                ApplyFloatingLayout(item);
+                SaveSettings(item);
+            }
+            return 0;
+
         case WM_DESTROY:
             if (item)
                 item->floatingWindow = nullptr;
