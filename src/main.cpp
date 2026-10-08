@@ -507,6 +507,58 @@ namespace
         return extension && lstrcmpiW(extension, L".exe") == 0;
     }
 
+    bool ResolveExecutablePath(const std::wstring& droppedPath, std::wstring& executablePath)
+    {
+        if (IsExeFile(droppedPath.c_str()))
+        {
+            executablePath = droppedPath;
+            return true;
+        }
+
+        const wchar_t* extension = wcsrchr(droppedPath.c_str(), L'.');
+        if (!extension || lstrcmpiW(extension, L".lnk") != 0)
+            return false;
+
+        IShellLinkW* shellLink = nullptr;
+        if (FAILED(CoCreateInstance(
+                CLSID_ShellLink,
+                nullptr,
+                CLSCTX_INPROC_SERVER,
+                IID_IShellLinkW,
+                reinterpret_cast<void**>(&shellLink))))
+            return false;
+
+        IPersistFile* persistFile = nullptr;
+        bool resolved = false;
+
+        if (SUCCEEDED(shellLink->QueryInterface(
+                IID_IPersistFile,
+                reinterpret_cast<void**>(&persistFile))))
+        {
+            if (SUCCEEDED(persistFile->Load(droppedPath.c_str(), STGM_READ)))
+            {
+                wchar_t target[MAX_PATH]{};
+                WIN32_FIND_DATAW findData{};
+
+                if (SUCCEEDED(shellLink->GetPath(
+                        target,
+                        MAX_PATH,
+                        &findData,
+                        SLGP_RAWPATH)) &&
+                    IsExeFile(target))
+                {
+                    executablePath = target;
+                    resolved = true;
+                }
+            }
+
+            persistFile->Release();
+        }
+
+        shellLink->Release();
+        return resolved;
+    }
+
     std::wstring GetFileNameWithoutExtension(const std::wstring& path)
     {
         const size_t slash = path.find_last_of(L"\\/");
@@ -1637,18 +1689,19 @@ namespace
 
     void HandleDroppedPath(HWND hwnd, HINSTANCE hInstance, const std::wstring& path)
     {
-        if (!IsExeFile(path.c_str()))
+        std::wstring executablePath;
+        if (!ResolveExecutablePath(path, executablePath))
         {
             MessageBoxW(
                 hwnd,
-                L"O Pingo precisa receber um arquivo .exe.\n\nArraste o executável do aplicativo para a área indicada.",
+                L"O Pingo não conseguiu identificar o aplicativo.\n\nArraste um .exe ou um atalho .lnk de um aplicativo.",
                 L"Pingo App",
                 MB_OK | MB_ICONINFORMATION
             );
             return;
         }
 
-        PingoAppItem* newItem = CreatePingoAppItem(hwnd, hInstance, path);
+        PingoAppItem* newItem = CreatePingoAppItem(hwnd, hInstance, executablePath);
         if (!newItem)
         {
             MessageBoxW(
@@ -1700,7 +1753,9 @@ namespace
                 continue;
 
             path.resize(required);
-            HandleDroppedPath(hwnd, hInstance, path);
+            std::wstring executablePath;
+            if (ResolveExecutablePath(path, executablePath))
+                HandleDroppedPath(hwnd, hInstance, path);
 
             if (g_currentItem)
                 break;
@@ -1816,7 +1871,8 @@ namespace
                         {
                             path.resize(required);
 
-                            if (IsExeFile(path.c_str()))
+                            std::wstring executablePath;
+                            if (ResolveExecutablePath(path, executablePath))
                             {
                                 HandleDroppedPath(hwnd_, hInstance_, path);
                                 handled = true;
