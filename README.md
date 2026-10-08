@@ -22,9 +22,11 @@ O projeto será desenvolvido em **C++**, utilizando recursos nativos do Windows 
 
 ## 📍 Status
 
-**Etapa 0 — Preparação do repositório** ✅
+**Etapa 10 — Em desenvolvimento** 🚧
 
-A implementação do aplicativo começa na **Etapa 1**.
+As etapas 1–10 já foram implementadas. A interface do Pingo foi atualizada com a identidade do pinguim e o sistema de arrastar/soltar foi reforçado com OLE Drag & Drop, incluindo feedback visual durante o arraste.
+
+A próxima etapa planejada é a **Etapa 11 — abrir o aplicativo com duplo clique**.
 
 ## 🎯 Objetivo
 
